@@ -20,6 +20,12 @@ DRAM::QElem::QElem(int core, bool id, int PCaddr, int value, int issueCycle, int
 	this->remainingCycles = remainingCycles;
 }
 
+DRAM::DRAM(int rowDelay, int colDelay)
+{
+	row_access_delay = rowDelay;
+	col_access_delay = colDelay;
+}
+
 // finish the currently running DRAM instruction and set the next one
 void DRAM::finishCurrDRAM(int nextRegister)
 {
@@ -29,22 +35,22 @@ void DRAM::finishCurrDRAM(int nextRegister)
 	popAndUpdate(Q, nextRow, nextCol);
 
 	MIPS_Core::clockCycles += top.remainingCycles;
-	if (top.id && (*cores[top.core]).registersAddrDRAM[top.value] != make_pair(-1, -1))
+	if (!top.id)
 	{
-		(*cores[top.core]).registers[top.value] = buffer[currCol];
-		if ((*cores[top.core]).registersAddrDRAM[top.value].first == top.issueCycle)
+		buffer[currCol] = top.value;
+		printDRAMCompletion(top.core, top.PCaddr, top.startCycle, MIPS_Core::clockCycles);
+	}
+	else if (cores[top.core]->registersAddrDRAM[top.value] != make_pair(-1, -1))
+	{
+		cores[top.core]->registers[top.value] = buffer[currCol];
+		if (cores[top.core]->registersAddrDRAM[top.value].first == top.issueCycle)
 		{
-			(*cores[top.core]).registersAddrDRAM[top.value] = {-1, -1};
+			cores[top.core]->registersAddrDRAM[top.value] = {-1, -1};
 			if (nextRegister == top.value)
 				nextRegister = 32;
 		}
-		lastAddr.first = currCol * 4 + currRow * ROWS;
-		lastAddr.second = buffer[currCol];
-		printDRAMCompletion(top.core, top.PCaddr, top.startCycle, MIPS_Core::clockCycles);
-	}
-	else if (!top.id)
-	{
-		buffer[currCol] = top.value;
+		cores[top.core]->lastAddr.first = currCol * 4 + currRow * ROWS;
+		cores[top.core]->lastAddr.second = buffer[currCol];
 		printDRAMCompletion(top.core, top.PCaddr, top.startCycle, MIPS_Core::clockCycles);
 	}
 	else
@@ -53,6 +59,7 @@ void DRAM::finishCurrDRAM(int nextRegister)
 	setNextDRAM(top.core, nextRow, nextCol, nextRegister);
 }
 
+// @TODO: implement logic for multi core
 // set the next DRAM command to be executed (implements reordering)
 void DRAM::setNextDRAM(int core, int nextRow, int nextCol, int nextRegister)
 {
@@ -63,12 +70,12 @@ void DRAM::setNextDRAM(int core, int nextRow, int nextCol, int nextRegister)
 	}
 	if (nextRegister != 32)
 	{
-		nextRow = (*cores[core]).registersAddrDRAM[nextRegister].second / ROWS;
-		nextCol = ((*cores[core]).registersAddrDRAM[nextRegister].second % ROWS) / 4;
+		nextRow = cores[core]->registersAddrDRAM[nextRegister].second / ROWS;
+		nextCol = (cores[core]->registersAddrDRAM[nextRegister].second % ROWS) / 4;
 	}
 
 	QElem top = DRAMbuffer[nextRow][nextCol].front();
-	while (top.id && (*cores[top.core]).registersAddrDRAM[top.value].first != top.issueCycle && popAndUpdate(DRAMbuffer[nextRow][nextCol], nextRow, nextCol, true))
+	while (top.id && cores[top.core]->registersAddrDRAM[top.value].first != top.issueCycle && popAndUpdate(DRAMbuffer[nextRow][nextCol], nextRow, nextCol, true))
 		top = DRAMbuffer[nextRow][nextCol].front();
 
 	if (DRAMbuffer.empty())
@@ -76,16 +83,17 @@ void DRAM::setNextDRAM(int core, int nextRow, int nextCol, int nextRegister)
 		currCol = -1;
 		return;
 	}
-	int delay = bufferUpdate(nextRow, nextCol);
-	DRAMbuffer[currRow][currCol].front().startCycle = (*cores[top.core]).clockCycles + 1;
+	bufferUpdate(nextRow, nextCol);
+	DRAMbuffer[currRow][currCol].front().startCycle = cores[top.core]->clockCycles + 1;
 	DRAMbuffer[currRow][currCol].front().remainingCycles = delay;
 }
 
+// @TODO: implement logic for multi core
 // pop the queue element and update the row and column if needed (returns false if DRAM empty after pop)
 bool DRAM::popAndUpdate(queue<QElem> &Q, int &row, int &col, bool skip)
 {
 	if (skip)
-		printDRAMCompletion(Q.front().core, Q.front().PCaddr, (*cores[Q.front().core]).clockCycles, (*cores[Q.front().core]).clockCycles, "skipped");
+		printDRAMCompletion(Q.front().core, Q.front().PCaddr, cores[Q.front().core]->clockCycles, cores[Q.front().core]->clockCycles, "skipped");
 	Q.pop();
 	--DRAMsize;
 	if (Q.empty())
@@ -106,9 +114,8 @@ bool DRAM::popAndUpdate(queue<QElem> &Q, int &row, int &col, bool skip)
 }
 
 // implement buffer update
-int DRAM::bufferUpdate(int row, int col)
+void DRAM::bufferUpdate(int row, int col)
 {
-	int delay;
 	if (row == -1)
 	{
 		delay = (currRow != -1) * row_access_delay;
@@ -122,14 +129,14 @@ int DRAM::bufferUpdate(int row, int col)
 	else
 		delay = col_access_delay;
 	currRow = row, currCol = col;
-	return delay;
 }
 
 // prints the cycle info of DRAM delay
 void DRAM::printDRAMCompletion(int core, int PCaddr, int begin, int end, string action)
 {
+	cout << "Core " << core << " -\n";
 	cout << begin << '-' << end << " (DRAM call " << action << "): (PC address " << PCaddr << ") ";
-	for (auto s : (*cores[core]).commands[PCaddr])
+	for (auto s : cores[core]->commands[PCaddr])
 		cout << s << ' ';
 	cout << "\n\n";
 }

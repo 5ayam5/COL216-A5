@@ -1,6 +1,6 @@
 all: main
 
-main: DRAM.o MIPS_Core.o
+main: main.cpp DRAM.o MIPS_Core.o
 	g++ -o main main.cpp DRAM.o MIPS_Core.o -std=c++17
 
 MIPS_Core.o: MIPS_Core.cpp MIPS_Core.hpp

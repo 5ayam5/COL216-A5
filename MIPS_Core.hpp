@@ -11,6 +11,8 @@ struct DRAM;
 // struct to store the registers and the functions to be executed
 struct MIPS_Core
 {
+	// maximum size of instruction set
+	static const int MAX = 1 << 8;
 	// instruction set
 	unordered_map<string, function<int(MIPS_Core &, string, string, string)>> instructions;
 	// mapping names to a unique number
@@ -21,14 +23,13 @@ struct MIPS_Core
 	int registers[32], PCcurr, PCnext, id;
 	static int clockCycles;
 	pair<int, int> registersAddrDRAM[32];
-	vector<int> commandCount;
 	// last location accessed by DRAM is stored
 	pair<int, int> lastAddr;
-	bool isDRAM;
-	DRAM *dram;
+	bool isDRAM, done;
+	static DRAM *dram;
 
 
-	MIPS_Core(ifstream &file, DRAM *dram);
+	MIPS_Core(ifstream &file);
 
 	int addi(string r1, string r2, string num);
 	int add(string r1, string r2, string num);
@@ -48,10 +49,10 @@ struct MIPS_Core
 	bool checkRegisters(vector<string> regs);
 	void parseCommand(string line);
 	void constructCommands(ifstream &file);
-	void executeCommands();
+	void executeCommand();
 	void printCycleExecution(vector<string> &command, int PCaddr);
 	void printRegisters();
-	void handleExit(int code);
+	static void handleExit(int code, int core = -1, vector<int> errorCommand = vector<int>());
 	void initVars();
 };
 

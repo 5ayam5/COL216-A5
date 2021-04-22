@@ -21,23 +21,25 @@ struct DRAM
 	};
 
 	// constants
-	static const int MAX = (1 << 20), ROWS = (1 << 10), DRAM_MAX = (1 << 5);
+	static const int MAX = 1 << 20, ROWS = 1 << 10, DRAM_MAX = 1 << 5;
 	// DRAM delays
 	int row_access_delay, col_access_delay;
-	int DRAMsize, currRow, currCol, rowBufferUpdates;
+	// "dynamic" vars
+	int DRAMsize, currRow, currCol, rowBufferUpdates, delay;
 	// data stored in allocated memory
 	vector<vector<int>> data;
 	vector<int> buffer;
 	// data structure to store info about requests sent to the DRAM, key is the row number and value is QElem
 	unordered_map<int, unordered_map<int, queue<QElem>>> DRAMbuffer;
-	// last location accessed by DRAM is stored
-	pair<int, int> lastAddr;
 	vector<MIPS_Core*> cores;
 
+	DRAM(int rowDelay, int colDelay);
+
+	void finishExecution();
 	void finishCurrDRAM(int nextRegister = 32);
 	void setNextDRAM(int core, int nextRow, int nextCol, int nextRegister = 32);
 	bool popAndUpdate(queue<QElem> &Q, int &row, int &col, bool skip = false);
-	int bufferUpdate(int row = -1, int col = -1);
+	void bufferUpdate(int row = -1, int col = -1);
 	void printDRAMCompletion(int core, int PCaddr, int begin, int end, string action = "executed");
 };
 

@@ -6,30 +6,29 @@ using namespace std;
 
 int main(int argc, char *argv[])
 {
-	if (argc != 4)
+	if (argc != 6)
 	{
-		cerr << "Required arguments: file_name ROW_ACCESS_DELAY COL_ACCESS_DELAY\n";
+		cerr << "Required arguments: folder_name N M ROW_ACCESS_DELAY COL_ACCESS_DELAY\n";
 		return 0;
 	}
-	ifstream file(argv[1]);
-	MIPS_Core *mips;
-	DRAM *dram = new DRAM();
-	if (file.is_open())
-		try
+	int n = stoi(argv[2]), m = stoi(argv[3]), rowDelay = stoi(argv[4]), colDelay = stoi(argv[5]);
+	string folder = string(argv[1]) + '/';
+	DRAM *dram = new DRAM(rowDelay, colDelay);
+	MIPS_Core::dram = dram;
+	for (int i = 1; i <= n; ++i)
+	{
+		ifstream file(folder + to_string(i) + ".asm");
+		if (file.is_open())
+			dram->cores.push_back(new MIPS_Core(file));
+		else
 		{
-			mips = new MIPS_Core(file, dram);
-		}
-		catch (exception &e)
-		{
-			cerr << "Required arguments: file_name ROW_ACCESS_DELAY COL_ACCESS_DELAY\n";
+			cerr << "File number " << i << " could not be opened\n";
 			return 0;
 		}
-	else
-	{
-		cerr << "File could not be opened. Terminating...\n";
-		return 0;
 	}
 
-	mips->executeCommands();
+	while (!dram->cores[0]->done && MIPS_Core::clockCycles < m)
+		dram->cores[0]->executeCommand();
+
 	return 0;
 }
