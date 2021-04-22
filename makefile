@@ -1,7 +1,13 @@
-all: MIPS_interpreter_DRAM
+all: main
 
-MIPS_interpreter_DRAM: MIPS_interpreter_DRAM.cpp
-	g++ MIPS_interpreter_DRAM.cpp -o MIPS_interpreter_DRAM -std=c++17
+main: DRAM.o MIPS_Core.o
+	g++ -o main main.cpp DRAM.o MIPS_Core.o -std=c++17
+
+MIPS_Core.o: MIPS_Core.cpp MIPS_Core.hpp
+	g++ -c MIPS_Core.cpp -std=c++17
+
+DRAM.o: DRAM.cpp DRAM.hpp
+	g++ -c DRAM.cpp -std=c++17
 
 clean:
-	rm MIPS_interpreter_DRAM
+	rm -f DRAM.o MIPS_Core.o main
