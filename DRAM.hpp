@@ -35,9 +35,11 @@ struct DRAM
 
 	DRAM(int rowDelay, int colDelay);
 
+	void simulateExecution(int m);
+	int simulateCycle();
 	void finishExecution();
 	void finishCurrDRAM(int nextRegister = 32);
-	void setNextDRAM(int core, int nextRow, int nextCol, int nextRegister = 32);
+	void setNextDRAM(int nextRow, int nextCol, int core = -1, int nextRegister = 32);
 	bool popAndUpdate(queue<QElem> &Q, int &row, int &col, bool skip = false);
 	void bufferUpdate(int row = -1, int col = -1);
 	void printDRAMCompletion(int core, int PCaddr, int begin, int end, string action = "executed");

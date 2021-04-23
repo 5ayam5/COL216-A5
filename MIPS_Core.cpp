@@ -8,8 +8,10 @@ int MIPS_Core::clockCycles = 0;
 DRAM *MIPS_Core::dram;
 
 // constructor to initialise the instruction set
-MIPS_Core::MIPS_Core(ifstream &file)
+MIPS_Core::MIPS_Core(ifstream &file, int id)
 {
+	this->id = id;
+
 	instructions = {{"add", &MIPS_Core::add}, {"sub", &MIPS_Core::sub}, {"mul", &MIPS_Core::mul}, {"beq", &MIPS_Core::beq}, {"bne", &MIPS_Core::bne}, {"slt", &MIPS_Core::slt}, {"j", &MIPS_Core::j}, {"lw", &MIPS_Core::lw}, {"sw", &MIPS_Core::sw}, {"addi", &MIPS_Core::addi}};
 
 	for (int i = 0; i < 32; ++i)
@@ -307,47 +309,37 @@ void MIPS_Core::constructCommands(ifstream &file)
 }
 
 // execute the commands sequentially
-void MIPS_Core::executeCommand()
+int MIPS_Core::executeCommand()
 {
 	if (PCcurr >= commands.size())
 	{
 		done = true;
-		return;
+		return 0;
 	}
 	isDRAM = false;
 	vector<string> &command = commands[PCcurr];
 	if (instructions.find(command[0]) == instructions.end())
 	{
-		handleExit(4);
-		return;
+		handleError(4);
+		return 4;
 	}
 	int ret = instructions[command[0]](*this, command[1], command[2], command[3]);
 	if (ret > 0)
 	{
-		handleExit(ret);
-		return;
+		handleError(ret);
+		return ret;
 	}
 	if (ret != 0)
-	{
-		dram->finishCurrDRAM(-ret - 1);
-		return;
-	}
-	++clockCycles;
+		return -ret - 1;
 	PCcurr = PCnext;
-	if (!dram->DRAMbuffer.empty())
-	{
-		// first lw/sw operation after DRAM_buffer emptied
-		if (dram->currCol == -1)
-			dram->setNextDRAM(id, dram->DRAMbuffer.begin()->first, dram->DRAMbuffer[dram->DRAMbuffer.begin()->first].begin()->first);
-		else if (--dram->DRAMbuffer[dram->currRow][dram->currCol].front().remainingCycles == 0)
-			dram->finishCurrDRAM();
-	}
 	printCycleExecution(command, PCcurr);
+	return 0;
 }
 
 // print cycle info
 void MIPS_Core::printCycleExecution(vector<string> &command, int PCaddr)
 {
+	cout << "(Core " << id << ") ";
 	if (isDRAM)
 		cout << clockCycles << ": (DRAM call queued) ";
 	else
@@ -370,15 +362,15 @@ void MIPS_Core::printRegisters()
 }
 
 /*
-		handle all exit codes:
-		0: correct execution
-		1: register provided is incorrect
-		2: invalid label
-		3: unaligned or invalid address
-		4: syntax error
-		5: commands exceed memory limit
-	*/
-void MIPS_Core::handleExit(int code, int core, vector<int> errorCommand)
+	handle all exit codes:
+	0: correct execution
+	1: register provided is incorrect
+	2: invalid label
+	3: unaligned or invalid address
+	4: syntax error
+	5: commands exceed memory limit
+*/
+void MIPS_Core::handleError(int code)
 {
 	switch (code)
 	{
@@ -398,27 +390,12 @@ void MIPS_Core::handleExit(int code, int core, vector<int> errorCommand)
 		cerr << "Memory limit exceeded\n";
 		break;
 	default:
-		break;
+		return;
 	}
-	if (code != 0)
-	{
-		cerr << "Error encountered in core " << core << " at:\n";
-		for (auto &s : errorCommand)
-			cerr << s << ' ';
-		cerr << '\n';
-		throw code;
-	}
-
-	cout << "Exit code: " << code << '\n';
-
-	cout << "\nThe Row Buffer was updated " << dram->rowBufferUpdates << " times.\n";
-	cout << "\nFollowing are the non-zero data values:\n";
-	for (int i = 0; i < DRAM::ROWS; ++i)
-		for (int j = 0; j < DRAM::ROWS / 4; ++j)
-			if (dram->data[i][j] != 0)
-				cout << (DRAM::ROWS * i + 4 * j) << '-' << (DRAM::ROWS * i + 4 * j) + 3 << hex << ": " << dram->data[i][j] << '\n'
-					 << dec;
-	cout << "\nTotal number of cycles: " << clockCycles << " + " << dram->delay << " (cycles taken for code execution + final writeback delay)\n";
+	cerr << "Error encountered in core " << id << " at:\n";
+	for (auto &s : commands[PCcurr])
+		cerr << s << ' ';
+	cerr << '\n';
 }
 
 // initialize variables before executing commands
@@ -426,12 +403,13 @@ void MIPS_Core::initVars()
 {
 	if (commands.size() >= MAX / 4)
 	{
-		handleExit(5);
+		handleError(5);
 		return;
 	}
-	clockCycles = 0;
+	clockCycles = 1;
 	fill_n(registers, 32, 0);
 	fill_n(registersAddrDRAM, 32, make_pair(-1, -1));
 	lastAddr = {-1, -1};
+	dram->currRow = -1, dram->currCol = -1;
 	done = false;
 }

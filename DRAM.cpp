@@ -24,6 +24,51 @@ DRAM::DRAM(int rowDelay, int colDelay)
 {
 	row_access_delay = rowDelay;
 	col_access_delay = colDelay;
+	data.assign(ROWS, vector<int>(ROWS >> 2, 0));
+}
+
+// simulate complete execution
+void DRAM::simulateExecution(int m)
+{
+	while (MIPS_Core::clockCycles <= m && simulateCycle() == 0)
+		continue;
+	finishExecution();
+}
+
+// simulate a cycle execution
+int DRAM::simulateCycle()
+{
+	for (auto core: cores)
+	{
+		int ret = core->executeCommand();
+		if (ret > 0)
+			return ret;
+	}
+
+	if (!DRAMbuffer.empty())
+	{
+		// @TODO: change the algo here too
+		// first lw/sw operation after DRAM_buffer emptied
+		if (currCol == -1)
+			setNextDRAM(DRAMbuffer.begin()->first, DRAMbuffer[DRAMbuffer.begin()->first].begin()->first);
+		else if (--DRAMbuffer[currRow][currCol].front().remainingCycles == 0)
+			finishCurrDRAM();
+	}
+
+	++MIPS_Core::clockCycles;
+	return 0;
+}
+
+// finish all (or some?) DRAM commands
+void DRAM::finishExecution()
+{
+	cout << "\nThe Row Buffer was updated " << rowBufferUpdates << " times.\n";
+	cout << "\nFollowing are the non-zero data values:\n";
+	for (int i = 0; i < ROWS; ++i)
+		for (int j = 0; j < ROWS / 4; ++j)
+			if (data[i][j] != 0)
+				cout << (ROWS * i + 4 * j) << '-' << (ROWS * i + 4 * j) + 3 << hex << ": " << data[i][j] << '\n'
+					 << dec;
 }
 
 // finish the currently running DRAM instruction and set the next one
@@ -56,12 +101,12 @@ void DRAM::finishCurrDRAM(int nextRegister)
 	else
 		printDRAMCompletion(top.core, top.PCaddr, top.startCycle, MIPS_Core::clockCycles, "rejected");
 
-	setNextDRAM(top.core, nextRow, nextCol, nextRegister);
+	setNextDRAM(nextRow, nextCol, top.core, nextRegister);
 }
 
 // @TODO: implement logic for multi core
 // set the next DRAM command to be executed (implements reordering)
-void DRAM::setNextDRAM(int core, int nextRow, int nextCol, int nextRegister)
+void DRAM::setNextDRAM(int nextRow, int nextCol, int core, int nextRegister)
 {
 	if (DRAMbuffer.empty())
 	{
@@ -134,7 +179,7 @@ void DRAM::bufferUpdate(int row, int col)
 // prints the cycle info of DRAM delay
 void DRAM::printDRAMCompletion(int core, int PCaddr, int begin, int end, string action)
 {
-	cout << "Core " << core << " -\n";
+	cout << "(Core " << core << ")\n";
 	cout << begin << '-' << end << " (DRAM call " << action << "): (PC address " << PCaddr << ") ";
 	for (auto s : cores[core]->commands[PCaddr])
 		cout << s << ' ';

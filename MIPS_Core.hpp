@@ -29,7 +29,7 @@ struct MIPS_Core
 	static DRAM *dram;
 
 
-	MIPS_Core(ifstream &file);
+	MIPS_Core(ifstream &file, int id);
 
 	int addi(string r1, string r2, string num);
 	int add(string r1, string r2, string num);
@@ -49,10 +49,10 @@ struct MIPS_Core
 	bool checkRegisters(vector<string> regs);
 	void parseCommand(string line);
 	void constructCommands(ifstream &file);
-	void executeCommand();
+	int executeCommand();
 	void printCycleExecution(vector<string> &command, int PCaddr);
 	void printRegisters();
-	static void handleExit(int code, int core = -1, vector<int> errorCommand = vector<int>());
+	void handleError(int code);
 	void initVars();
 };
 

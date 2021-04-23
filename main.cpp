@@ -15,11 +15,11 @@ int main(int argc, char *argv[])
 	string folder = string(argv[1]) + '/';
 	DRAM *dram = new DRAM(rowDelay, colDelay);
 	MIPS_Core::dram = dram;
-	for (int i = 1; i <= n; ++i)
+	for (int i = 0; i < n; ++i)
 	{
 		ifstream file(folder + to_string(i) + ".asm");
 		if (file.is_open())
-			dram->cores.push_back(new MIPS_Core(file));
+			dram->cores.push_back(new MIPS_Core(file, i));
 		else
 		{
 			cerr << "File number " << i << " could not be opened\n";
@@ -27,8 +27,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	while (!dram->cores[0]->done && MIPS_Core::clockCycles < m)
-		dram->cores[0]->executeCommand();
+	dram->simulateExecution(m);
 
 	return 0;
 }
