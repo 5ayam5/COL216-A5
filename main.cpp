@@ -12,6 +12,11 @@ int main(int argc, char *argv[])
 		return 0;
 	}
 	int n = stoi(argv[2]), m = stoi(argv[3]), rowDelay = stoi(argv[4]), colDelay = stoi(argv[5]);
+	if (n > MIPS_Core::MAX_CORES)
+	{
+		cerr << "Cannot have more than 16 cores\n";
+		return 0;
+	}
 	string folder = string(argv[1]) + '/';
 	DRAM *dram = new DRAM(rowDelay, colDelay);
 	MIPS_Core::dram = dram;

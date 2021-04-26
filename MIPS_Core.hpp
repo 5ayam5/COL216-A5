@@ -12,7 +12,7 @@ struct DRAM;
 struct MIPS_Core
 {
 	// maximum size of instruction set
-	static const int MAX = 1 << 8;
+	static const int MAX = 1 << 8, MAX_CORES = 16;
 	// instruction set
 	unordered_map<string, function<int(MIPS_Core &, string, string, string)>> instructions;
 	// mapping names to a unique number
@@ -25,7 +25,7 @@ struct MIPS_Core
 	pair<int, int> registersAddrDRAM[32];
 	// last location accessed by DRAM is stored
 	pair<int, int> lastAddr;
-	bool isDRAM, done;
+	bool isDRAM;
 	static DRAM *dram;
 
 

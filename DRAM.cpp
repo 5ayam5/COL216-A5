@@ -24,12 +24,19 @@ DRAM::DRAM(int rowDelay, int colDelay)
 {
 	row_access_delay = rowDelay;
 	col_access_delay = colDelay;
+	maxToProcess = rowDelay / colDelay;
 	data.assign(ROWS, vector<int>(ROWS >> 2, 0));
 }
 
 // simulate complete execution
 void DRAM::simulateExecution(int m)
 {
+	MIPS_Core::clockCycles = 1;
+	currCore = currRow = currCol = -1;
+	totPending = 0, numProcessed = 0;
+	pendingCount.assign(cores.size(), 0);
+	priority.assign(cores.size(), -1);
+	DRAMbuffer.assign(cores.size(), unordered_map<int, unordered_map<int, queue<QElem>>>());
 	while (MIPS_Core::clockCycles <= m && simulateCycle() == 0)
 		continue;
 	finishExecution();
@@ -38,20 +45,23 @@ void DRAM::simulateExecution(int m)
 // simulate a cycle execution
 int DRAM::simulateCycle()
 {
-	for (auto core: cores)
+	for (int core = 0; core < (int)cores.size(); ++core)
 	{
-		int ret = core->executeCommand();
+		int ret = cores[core]->executeCommand();
 		if (ret > 0)
 			return ret;
+		priority[core] = -ret - 1;
 	}
 
-	if (!DRAMbuffer.empty())
+	if (totPending != 0)
 	{
-		// @TODO: change the algo here too
 		// first lw/sw operation after DRAM_buffer emptied
-		if (currCol == -1)
-			setNextDRAM(DRAMbuffer.begin()->first, DRAMbuffer[DRAMbuffer.begin()->first].begin()->first);
-		else if (--DRAMbuffer[currRow][currCol].front().remainingCycles == 0)
+		if (currCore == -1)
+		{
+			int nextCore = find_if(pendingCount.begin(), pendingCount.end(), [](int &c) { return c != 0; }) - pendingCount.begin();
+			setNextDRAM(nextCore, DRAMbuffer[nextCore].begin()->first, DRAMbuffer[nextCore].begin()->second.begin()->first);
+		}
+		else if (--DRAMbuffer[currCore][currRow][currCol].front().remainingCycles == 0)
 			finishCurrDRAM();
 	}
 
@@ -62,7 +72,8 @@ int DRAM::simulateCycle()
 // finish all (or some?) DRAM commands
 void DRAM::finishExecution()
 {
-	cout << "\nThe Row Buffer was updated " << rowBufferUpdates << " times.\n";
+	bufferUpdate();
+	cout << "\nThe Row Buffer was updated " << rowBufferUpdates << " times. (including update on final write-back)\n";
 	cout << "\nFollowing are the non-zero data values:\n";
 	for (int i = 0; i < ROWS; ++i)
 		for (int j = 0; j < ROWS / 4; ++j)
@@ -72,16 +83,18 @@ void DRAM::finishExecution()
 }
 
 // finish the currently running DRAM instruction and set the next one
-void DRAM::finishCurrDRAM(int nextRegister)
+void DRAM::finishCurrDRAM()
 {
-	auto &Q = DRAMbuffer[currRow][currCol];
-	int nextRow = currRow, nextCol = currCol;
-	QElem top = DRAMbuffer[currRow][currCol].front();
-	popAndUpdate(Q, nextRow, nextCol);
+	auto &Q = DRAMbuffer[currCore][currRow][currCol];
+	int nextCore = currCore, nextRow = currRow, nextCol = currCol;
+	QElem top = DRAMbuffer[currCore][currRow][currCol].front();
+	delay = 0;
+	popAndUpdate(Q, nextCore, nextRow, nextCol);
 
 	MIPS_Core::clockCycles += top.remainingCycles;
 	if (!top.id)
 	{
+		++rowBufferUpdates;
 		buffer[currCol] = top.value;
 		printDRAMCompletion(top.core, top.PCaddr, top.startCycle, MIPS_Core::clockCycles);
 	}
@@ -91,8 +104,8 @@ void DRAM::finishCurrDRAM(int nextRegister)
 		if (cores[top.core]->registersAddrDRAM[top.value].first == top.issueCycle)
 		{
 			cores[top.core]->registersAddrDRAM[top.value] = {-1, -1};
-			if (nextRegister == top.value)
-				nextRegister = 32;
+			if (priority[currCore] == top.value)
+				priority[currCore] = -1;
 		}
 		cores[top.core]->lastAddr.first = currCol * 4 + currRow * ROWS;
 		cores[top.core]->lastAddr.second = buffer[currCol];
@@ -101,85 +114,98 @@ void DRAM::finishCurrDRAM(int nextRegister)
 	else
 		printDRAMCompletion(top.core, top.PCaddr, top.startCycle, MIPS_Core::clockCycles, "rejected");
 
-	setNextDRAM(nextRow, nextCol, top.core, nextRegister);
+	setNextDRAM(nextCore, nextRow, nextCol);
 }
 
-// @TODO: implement logic for multi core
+// @TODO: implement multi cycle selection
 // set the next DRAM command to be executed (implements reordering)
-void DRAM::setNextDRAM(int nextRow, int nextCol, int core, int nextRegister)
+void DRAM::setNextDRAM(int nextCore, int nextRow, int nextCol)
 {
-	if (DRAMbuffer.empty())
+	if (totPending == 0)
 	{
-		currCol = -1;
+		currCore = -1;
 		return;
 	}
-	if (nextRegister != 32)
+	if (priority[nextCore] != -1)
 	{
-		nextRow = cores[core]->registersAddrDRAM[nextRegister].second / ROWS;
-		nextCol = (cores[core]->registersAddrDRAM[nextRegister].second % ROWS) / 4;
+		nextRow = cores[nextCore]->registersAddrDRAM[priority[nextCore]].second / ROWS;
+		nextCol = (cores[nextCore]->registersAddrDRAM[priority[nextCore]].second % ROWS) / 4;
 	}
 
-	QElem top = DRAMbuffer[nextRow][nextCol].front();
-	while (top.id && cores[top.core]->registersAddrDRAM[top.value].first != top.issueCycle && popAndUpdate(DRAMbuffer[nextRow][nextCol], nextRow, nextCol, true))
-		top = DRAMbuffer[nextRow][nextCol].front();
+	QElem top = DRAMbuffer[nextCore][nextRow][nextCol].front();
+	while (top.id && cores[top.core]->registersAddrDRAM[top.value].first != top.issueCycle && popAndUpdate(DRAMbuffer[nextCore][nextRow][nextCol], nextCore, nextRow, nextCol, true))
+		top = DRAMbuffer[nextCore][nextRow][nextCol].front();
 
-	if (DRAMbuffer.empty())
+	if (totPending == 0)
 	{
-		currCol = -1;
+		currCore = -1;
 		return;
 	}
-	bufferUpdate(nextRow, nextCol);
-	DRAMbuffer[currRow][currCol].front().startCycle = cores[top.core]->clockCycles + 1;
-	DRAMbuffer[currRow][currCol].front().remainingCycles = delay;
+	bufferUpdate(nextCore, nextRow, nextCol);
+	DRAMbuffer[currCore][currRow][currCol].front().startCycle = MIPS_Core::clockCycles + 1;
+	DRAMbuffer[currCore][currRow][currCol].front().remainingCycles = delay;
 }
 
-// @TODO: implement logic for multi core
 // pop the queue element and update the row and column if needed (returns false if DRAM empty after pop)
-bool DRAM::popAndUpdate(queue<QElem> &Q, int &row, int &col, bool skip)
+bool DRAM::popAndUpdate(queue<QElem> &Q, int &core, int &row, int &col, bool skip)
 {
 	if (skip)
 		printDRAMCompletion(Q.front().core, Q.front().PCaddr, cores[Q.front().core]->clockCycles, cores[Q.front().core]->clockCycles, "skipped");
 	Q.pop();
-	--DRAMsize;
+	--DRAMsize, --totPending, --pendingCount[core], ++numProcessed;
 	if (Q.empty())
 	{
-		DRAMbuffer[row].erase(col);
-		if (DRAMbuffer[row].empty())
+		DRAMbuffer[core][row].erase(col);
+		if (DRAMbuffer[core][row].empty())
 		{
-			DRAMbuffer.erase(row);
-			if (!DRAMbuffer.empty())
-				row = DRAMbuffer.begin()->first;
+			DRAMbuffer[core].erase(row);
+			numProcessed = maxToProcess;
 		}
-		if (DRAMbuffer.empty())
-			return false;
-		col = DRAMbuffer[row].begin()->first;
-		return true;
+		else
+			col = DRAMbuffer[core][row].begin()->first;
 	}
-	return false;
+	if (totPending == 0)
+	{
+		numProcessed = 0;
+		return false;
+	}
+	if (numProcessed == maxToProcess)
+	{
+		numProcessed = 0;
+		int nextCore = find_if(pendingCount.begin() + core + 1, pendingCount.end(), [](int &c) { return c != 0; }) - pendingCount.begin();
+		if (nextCore == (int)cores.size())
+			nextCore = find_if(pendingCount.begin(), pendingCount.begin() + core + 1, [](int &c) { return c != 0; }) - pendingCount.begin();
+		if (core == nextCore)
+			return true;
+		core = nextCore;
+		row = DRAMbuffer[core].begin()->first;
+		col = DRAMbuffer[core][row].begin()->first;
+	}
+	return true;
 }
 
 // implement buffer update
-void DRAM::bufferUpdate(int row, int col)
+void DRAM::bufferUpdate(int core, int row, int col)
 {
 	if (row == -1)
 	{
-		delay = (currRow != -1) * row_access_delay;
+		delay += (currRow != -1) * row_access_delay;
 		if (currRow != -1)
 			++rowBufferUpdates, data[currRow] = buffer, buffer = vector<int>();
 	}
 	else if (currRow == -1)
-		delay = row_access_delay + col_access_delay, ++rowBufferUpdates, buffer = data[row];
+		delay += row_access_delay + col_access_delay, ++rowBufferUpdates, buffer = data[row];
 	else if (currRow != row)
-		delay = 2 * row_access_delay + col_access_delay, ++rowBufferUpdates, data[currRow] = buffer, buffer = data[row];
+		delay += 2 * row_access_delay + col_access_delay, ++rowBufferUpdates, data[currRow] = buffer, buffer = data[row];
 	else
-		delay = col_access_delay;
-	currRow = row, currCol = col;
+		delay += col_access_delay;
+	currCore = core, currRow = row, currCol = col;
 }
 
 // prints the cycle info of DRAM delay
 void DRAM::printDRAMCompletion(int core, int PCaddr, int begin, int end, string action)
 {
-	cout << "(Core " << core << ")\n";
+	cout << "(Core " << core << ") ";
 	cout << begin << '-' << end << " (DRAM call " << action << "): (PC address " << PCaddr << ") ";
 	for (auto s : cores[core]->commands[PCaddr])
 		cout << s << ' ';

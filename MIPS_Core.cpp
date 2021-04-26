@@ -156,9 +156,9 @@ int MIPS_Core::lw(string r, string location, string unused1)
 	if (dram->DRAMsize == DRAM::DRAM_MAX)
 		return -33;
 	isDRAM = true;
-	dram->DRAMbuffer[address.second / DRAM::ROWS][(address.second % DRAM::ROWS) / 4].push({id, 1, PCcurr, registerMap[r], clockCycles + 1});
-	registersAddrDRAM[registerMap[r]] = {clockCycles + 1, address.second};
-	++dram->DRAMsize;
+	dram->DRAMbuffer[id][address.second / DRAM::ROWS][(address.second % DRAM::ROWS) / 4].push({id, 1, PCcurr, registerMap[r], clockCycles});
+	registersAddrDRAM[registerMap[r]] = {clockCycles, address.second};
+	++dram->pendingCount[id], ++dram->DRAMsize, ++dram->totPending;
 	return 0;
 }
 
@@ -177,8 +177,8 @@ int MIPS_Core::sw(string r, string location, string unused1)
 		return -33;
 	lastAddr = {address.second, registers[registerMap[r]]};
 	isDRAM = true;
-	dram->DRAMbuffer[address.second / DRAM::ROWS][(address.second % DRAM::ROWS) / 4].push({id, 0, PCcurr, registers[registerMap[r]], clockCycles + 1});
-	++dram->rowBufferUpdates, ++dram->DRAMsize;
+	dram->DRAMbuffer[id][address.second / DRAM::ROWS][(address.second % DRAM::ROWS) / 4].push({id, 0, PCcurr, registers[registerMap[r]], clockCycles});
+	++dram->pendingCount[id], ++dram->DRAMsize, ++dram->totPending;
 	PCnext = PCcurr + 1;
 	return 0;
 }
@@ -198,9 +198,9 @@ pair<bool, int> MIPS_Core::locateAddress(string location)
 			if (registersAddrDRAM[registerMap[reg]] != make_pair(-1, -1))
 				return {false, -registerMap[reg] - 1};
 			int address = registers[registerMap[reg]] + offset;
-			if (address % 4 || address >= DRAM::MAX)
+			if (address % 4 || address >= DRAM::MAX / MAX_CORES)
 				return {false, 3};
-			return {true, address};
+			return {true, address + id * DRAM::MAX / MAX_CORES};
 		}
 		catch (exception &e)
 		{
@@ -210,9 +210,9 @@ pair<bool, int> MIPS_Core::locateAddress(string location)
 	try
 	{
 		int address = stoi(location);
-		if (address % 4 || address >= DRAM::MAX)
+		if (address % 4 || address >= DRAM::MAX / MAX_CORES)
 			return {false, 3};
-		return {true, address};
+		return {true, address + id * DRAM::MAX / MAX_CORES};
 	}
 	catch (exception &e)
 	{
@@ -311,11 +311,8 @@ void MIPS_Core::constructCommands(ifstream &file)
 // execute the commands sequentially
 int MIPS_Core::executeCommand()
 {
-	if (PCcurr >= commands.size())
-	{
-		done = true;
+	if (PCcurr >= (int)commands.size())
 		return 0;
-	}
 	isDRAM = false;
 	vector<string> &command = commands[PCcurr];
 	if (instructions.find(command[0]) == instructions.end())
@@ -330,7 +327,7 @@ int MIPS_Core::executeCommand()
 		return ret;
 	}
 	if (ret != 0)
-		return -ret - 1;
+		return ret;
 	PCcurr = PCnext;
 	printCycleExecution(command, PCcurr);
 	return 0;
@@ -406,10 +403,7 @@ void MIPS_Core::initVars()
 		handleError(5);
 		return;
 	}
-	clockCycles = 1;
 	fill_n(registers, 32, 0);
 	fill_n(registersAddrDRAM, 32, make_pair(-1, -1));
 	lastAddr = {-1, -1};
-	dram->currRow = -1, dram->currCol = -1;
-	done = false;
 }
