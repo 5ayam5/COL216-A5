@@ -27,7 +27,7 @@ public:
 	// DRAM delays
 	int row_access_delay, col_access_delay, maxToProcess;
 	// "dynamic" vars
-	int DRAMsize, currCore, currRow, currCol, rowBufferUpdates, delay, totPending, numProcessed;
+	int DRAMsize, currCore, currRow, currCol, rowBufferUpdates, delay, totPending, numProcessed, M;
 	// data stored in allocated memory
 	vector<vector<int>> data;
 	vector<int> buffer;
