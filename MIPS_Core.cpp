@@ -45,6 +45,12 @@ int MIPS_Core::addi(string r1, string r2, string num)
 	{
 		if (registersAddrDRAM[registerMap[r2]] != make_pair(-1, -1))
 			return -registerMap[r2] - 1;
+		if (toWrite)
+		{
+			toWrite = false;
+			cout << "Delayed by 1 cycle since DRAM writing to registers in this cycle\n";
+			return 0;
+		}
 		registers[registerMap[r1]] = registers[registerMap[r2]] + stoi(num);
 		registersAddrDRAM[registerMap[r1]] = {-1, -1};
 		PCnext = PCcurr + 1;
@@ -89,6 +95,12 @@ int MIPS_Core::op(string r1, string r2, string r3, function<int(int, int)> opera
 		return -registerMap[r2] - 1;
 	if (registersAddrDRAM[registerMap[r3]] != make_pair(-1, -1))
 		return -registerMap[r3] - 1;
+	if (toWrite)
+	{
+		toWrite = false;
+		cout << "Delayed by 1 cycle since DRAM writing to registers in this cycle\n";
+		return 0;
+	}
 	registers[registerMap[r1]] = operation(registers[registerMap[r2]], registers[registerMap[r3]]);
 	registersAddrDRAM[registerMap[r1]] = {-1, -1};
 	PCnext = PCcurr + 1;
@@ -329,8 +341,8 @@ int MIPS_Core::executeCommand()
 	}
 	if (ret != 0)
 		return ret;
-	PCcurr = PCnext, ++instructionsCount;
 	printCycleExecution(command, PCcurr);
+	PCcurr = PCnext, ++instructionsCount;
 	return 0;
 }
 
@@ -407,4 +419,5 @@ void MIPS_Core::initVars()
 	fill_n(registers, 32, 0);
 	fill_n(registersAddrDRAM, 32, make_pair(-1, -1));
 	lastAddr = {-1, -1};
+	toWrite = false;
 }

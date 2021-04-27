@@ -107,6 +107,7 @@ void DRAM::finishCurrDRAM()
 	}
 	else if (cores[top.core]->registersAddrDRAM[top.value] != make_pair(-1, -1))
 	{
+		cores[top.core]->toWrite = true;
 		cores[top.core]->registers[top.value] = buffer[currCol];
 		if (cores[top.core]->registersAddrDRAM[top.value].first == top.issueCycle)
 		{

@@ -1,5 +1,4 @@
 make
-echo
 for folder in Tests/*
 do
 	echo

@@ -25,7 +25,7 @@ struct MIPS_Core
 	pair<int, int> registersAddrDRAM[32];
 	// last location accessed by DRAM is stored
 	pair<int, int> lastAddr;
-	bool isDRAM;
+	bool isDRAM, toWrite;
 	static DRAM *dram;
 
 
