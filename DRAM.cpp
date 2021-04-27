@@ -39,6 +39,9 @@ void DRAM::simulateExecution(int m)
 	priority.assign(cores.size(), -1);
 	DRAMbuffer.assign(cores.size(), unordered_map<int, unordered_map<int, queue<QElem>>>());
 
+	for (auto &core: cores)
+		core->initVars();
+
 	while (MIPS_Core::clockCycles <= M && simulateCycle() == 0)
 		continue;
 
@@ -140,8 +143,12 @@ void DRAM::setNextDRAM(int nextCore, int nextRow, int nextCol)
 	}
 
 	QElem top = DRAMbuffer[nextCore][nextRow][nextCol].front();
-	while (top.id && cores[top.core]->registersAddrDRAM[top.value].first != top.issueCycle && popAndUpdate(DRAMbuffer[nextCore][nextRow][nextCol], nextCore, nextRow, nextCol, true))
-		top = DRAMbuffer[nextCore][nextRow][nextCol].front();
+	if (top.id && cores[top.core]->registersAddrDRAM[top.value].first != top.issueCycle)
+	{
+		popAndUpdate(DRAMbuffer[nextCore][nextRow][nextCol], nextCore, nextRow, nextCol, true);
+		setNextDRAM(nextCore, nextRow, nextCol);
+		return;
+	}
 
 	int selectionTime = delay / 2;
 	if (selectionTime != 0)
@@ -149,24 +156,19 @@ void DRAM::setNextDRAM(int nextCore, int nextRow, int nextCol)
 		int end = MIPS_Core::clockCycles + selectionTime;
 		cout << "(Memory manager) " << MIPS_Core::clockCycles << '-' << end << ": Deciding next instruction to execute" << (end > M ? " (but max clock cycles exceeded)" : "") << "\n\n";
 	}
-	if (totPending == 0)
-	{
-		currCore = -1;
-		return;
-	}
 	bufferUpdate(nextCore, nextRow, nextCol);
 	DRAMbuffer[currCore][currRow][currCol].front().startCycle = MIPS_Core::clockCycles + 1 + selectionTime;
 	DRAMbuffer[currCore][currRow][currCol].front().remainingCycles = delay + selectionTime;
 }
 
 // pop the queue element and update the row and column if needed (returns false if DRAM empty after pop)
-bool DRAM::popAndUpdate(queue<QElem> &Q, int &core, int &row, int &col, bool skip)
+void DRAM::popAndUpdate(queue<QElem> &Q, int &core, int &row, int &col, bool skip)
 {
 	--DRAMsize, --totPending, --pendingCount[core], ++numProcessed, ++delay;
 	if (MIPS_Core::clockCycles + delay / 2 > M)
 	{
 		--delay;
-		return false;
+		return;
 	}
 	if (skip)
 		printDRAMCompletion(Q.front().core, Q.front().PCaddr, MIPS_Core::clockCycles + delay / 2, MIPS_Core::clockCycles + delay / 2, "skipped");
@@ -186,7 +188,7 @@ bool DRAM::popAndUpdate(queue<QElem> &Q, int &core, int &row, int &col, bool ski
 	if (totPending == 0)
 	{
 		numProcessed = 0;
-		return false;
+		return;
 	}
 	if (numProcessed == maxToProcess)
 	{
@@ -194,16 +196,24 @@ bool DRAM::popAndUpdate(queue<QElem> &Q, int &core, int &row, int &col, bool ski
 		if (MIPS_Core::clockCycles + delay / 2 > M)
 			delay -= 2;
 		numProcessed = 0;
-		int nextCore = find_if(pendingCount.begin() + core + 1, pendingCount.end(), [](int &c) { return c != 0; }) - pendingCount.begin();
+		int nextCore = cores.size();
+		for (int i = 1; i <= (int)cores.size(); ++i)
+			if (priority[(i + core) % cores.size()] != -1)
+			{
+				nextCore = (i + core) % cores.size();
+				break;
+			}
 		if (nextCore == (int)cores.size())
-			nextCore = find_if(pendingCount.begin(), pendingCount.begin() + core + 1, [](int &c) { return c != 0; }) - pendingCount.begin();
-		if (core == nextCore)
-			return true;
+			for (int i = 1; i <= (int)cores.size(); ++i)
+				if (pendingCount[(i + core) % cores.size()] != 0)
+				{
+					nextCore = (i + core) % cores.size();
+					break;
+				}
 		core = nextCore;
 		row = DRAMbuffer[core].begin()->first;
 		col = DRAMbuffer[core][row].begin()->first;
 	}
-	return true;
 }
 
 // implement buffer update

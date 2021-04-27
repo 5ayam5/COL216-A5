@@ -43,7 +43,7 @@ public:
 	void finishExecution();
 	void finishCurrDRAM();
 	void setNextDRAM(int nextCore, int nextRow, int nextCol);
-	bool popAndUpdate(queue<QElem> &Q, int &core, int &row, int &col, bool skip = false);
+	void popAndUpdate(queue<QElem> &Q, int &core, int &row, int &col, bool skip = false);
 	void bufferUpdate(int core = -1, int row = -1, int col = -1);
 	void printDRAMCompletion(int core, int PCaddr, int begin, int end, string action = "executed");
 };

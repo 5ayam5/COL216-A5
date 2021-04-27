@@ -34,7 +34,6 @@ MIPS_Core::MIPS_Core(ifstream &file, int id)
 	registerMap["$ra"] = 31;
 
 	constructCommands(file);
-	initVars();
 }
 
 // perform add immediate operation
@@ -311,6 +310,8 @@ void MIPS_Core::constructCommands(ifstream &file)
 // execute the commands sequentially
 int MIPS_Core::executeCommand()
 {
+	if (commands.size() >= MAX / 4)
+		return 5;
 	if (PCcurr >= (int)commands.size())
 		return 0;
 	isDRAM = false;
