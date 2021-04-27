@@ -4,7 +4,7 @@
 
 using namespace std;
 
-int MIPS_Core::clockCycles = 0;
+int MIPS_Core::clockCycles = 0, MIPS_Core::instructionsCount = 0;
 DRAM *MIPS_Core::dram;
 
 // constructor to initialise the instruction set
@@ -158,7 +158,7 @@ int MIPS_Core::lw(string r, string location, string unused1)
 	isDRAM = true;
 	dram->DRAMbuffer[id][address.second / DRAM::ROWS][(address.second % DRAM::ROWS) / 4].push({id, 1, PCcurr, registerMap[r], clockCycles});
 	registersAddrDRAM[registerMap[r]] = {clockCycles, address.second};
-	++dram->pendingCount[id], ++dram->DRAMsize, ++dram->totPending;
+	++dram->pendingCount[id], ++dram->DRAMsize, ++dram->totPending, --instructionsCount;
 	return 0;
 }
 
@@ -178,7 +178,7 @@ int MIPS_Core::sw(string r, string location, string unused1)
 	lastAddr = {address.second, registers[registerMap[r]]};
 	isDRAM = true;
 	dram->DRAMbuffer[id][address.second / DRAM::ROWS][(address.second % DRAM::ROWS) / 4].push({id, 0, PCcurr, registers[registerMap[r]], clockCycles});
-	++dram->pendingCount[id], ++dram->DRAMsize, ++dram->totPending;
+	++dram->pendingCount[id], ++dram->DRAMsize, ++dram->totPending, --instructionsCount;
 	PCnext = PCcurr + 1;
 	return 0;
 }
@@ -328,7 +328,7 @@ int MIPS_Core::executeCommand()
 	}
 	if (ret != 0)
 		return ret;
-	PCcurr = PCnext;
+	PCcurr = PCnext, ++instructionsCount;
 	printCycleExecution(command, PCcurr);
 	return 0;
 }

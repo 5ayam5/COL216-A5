@@ -32,14 +32,16 @@ DRAM::DRAM(int rowDelay, int colDelay)
 void DRAM::simulateExecution(int m)
 {
 	M = m;
-	MIPS_Core::clockCycles = 1;
+	MIPS_Core::clockCycles = 1, MIPS_Core::instructionsCount = 0;
 	currCore = currRow = currCol = -1;
 	totPending = 0, numProcessed = 0;
 	pendingCount.assign(cores.size(), 0);
 	priority.assign(cores.size(), -1);
 	DRAMbuffer.assign(cores.size(), unordered_map<int, unordered_map<int, queue<QElem>>>());
+
 	while (MIPS_Core::clockCycles <= M && simulateCycle() == 0)
 		continue;
+
 	finishExecution();
 }
 
@@ -81,6 +83,7 @@ void DRAM::finishExecution()
 			if (data[i][j] != 0)
 				cout << (ROWS * i + 4 * j) << '-' << (ROWS * i + 4 * j) + 3 << hex << ": " << data[i][j] << '\n'
 					 << dec;
+	cout << "\nTotal number of instructions executed in " << M << " cycles is: " << MIPS_Core::instructionsCount << "\nIPC = " << MIPS_Core::instructionsCount * 1.0 / M << '\n';
 }
 
 // finish the currently running DRAM instruction and set the next one
@@ -168,6 +171,7 @@ bool DRAM::popAndUpdate(queue<QElem> &Q, int &core, int &row, int &col, bool ski
 	if (skip)
 		printDRAMCompletion(Q.front().core, Q.front().PCaddr, MIPS_Core::clockCycles + delay / 2, MIPS_Core::clockCycles + delay / 2, "skipped");
 	Q.pop();
+	++MIPS_Core::instructionsCount;
 	if (Q.empty())
 	{
 		DRAMbuffer[core][row].erase(col);

@@ -21,7 +21,7 @@ struct MIPS_Core
 	vector<vector<string>> commands;
 	// "dynamic" vars
 	int registers[32], PCcurr, PCnext, id;
-	static int clockCycles;
+	static int clockCycles, instructionsCount;
 	pair<int, int> registersAddrDRAM[32];
 	// last location accessed by DRAM is stored
 	pair<int, int> lastAddr;
