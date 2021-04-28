@@ -45,15 +45,16 @@ int MIPS_Core::addi(string r1, string r2, string num)
 	{
 		if (registersAddrDRAM[registerMap[r2]] != make_pair(-1, -1))
 			return -registerMap[r2] - 1;
-		if (toWrite)
+		if (writePending)
 		{
-			toWrite = false;
+			writePending = false;
 			cout << "Delayed by 1 cycle since DRAM writing to registers in this cycle\n";
 			return 0;
 		}
 		registers[registerMap[r1]] = registers[registerMap[r2]] + stoi(num);
 		registersAddrDRAM[registerMap[r1]] = {-1, -1};
 		PCnext = PCcurr + 1;
+		writePortBusy = true;
 		return 0;
 	}
 	catch (exception &e)
@@ -95,15 +96,16 @@ int MIPS_Core::op(string r1, string r2, string r3, function<int(int, int)> opera
 		return -registerMap[r2] - 1;
 	if (registersAddrDRAM[registerMap[r3]] != make_pair(-1, -1))
 		return -registerMap[r3] - 1;
-	if (toWrite)
+	if (writePending)
 	{
-		toWrite = false;
+		writePending = false;
 		cout << "Delayed by 1 cycle since DRAM writing to registers in this cycle\n";
 		return 0;
 	}
 	registers[registerMap[r1]] = operation(registers[registerMap[r2]], registers[registerMap[r3]]);
 	registersAddrDRAM[registerMap[r1]] = {-1, -1};
 	PCnext = PCcurr + 1;
+	writePortBusy = true;
 	return 0;
 }
 
@@ -157,9 +159,9 @@ int MIPS_Core::lw(string r, string location, string unused1)
 		return address.second;
 
 	PCnext = PCcurr + 1;
-	if (address.second == lastAddr.first)
+	if (dram->forwarding.find(address.second) != dram->forwarding.end())
 	{
-		registers[registerMap[r]] = lastAddr.second;
+		registers[registerMap[r]] = dram->forwarding[address.second].second;
 		registersAddrDRAM[registerMap[r]] = {-1, -1};
 		return 0;
 	}
@@ -186,7 +188,7 @@ int MIPS_Core::sw(string r, string location, string unused1)
 
 	if (dram->DRAMsize == DRAM::DRAM_MAX)
 		return -33;
-	lastAddr = {address.second, registers[registerMap[r]]};
+	dram->forwarding[address.second] = {clockCycles, registers[registerMap[r]]};
 	isDRAM = true;
 	dram->DRAMbuffer[id][address.second / DRAM::ROWS][(address.second % DRAM::ROWS) / 4].push({id, 0, PCcurr, registers[registerMap[r]], clockCycles});
 	++dram->pendingCount[id], ++dram->DRAMsize, ++dram->totPending, --instructionsCount;
@@ -322,11 +324,9 @@ void MIPS_Core::constructCommands(ifstream &file)
 // execute the commands sequentially
 int MIPS_Core::executeCommand()
 {
-	if (commands.size() >= MAX / 4)
-		return 5;
 	if (PCcurr >= (int)commands.size())
 		return 0;
-	isDRAM = false;
+	isDRAM = false, writePortBusy = false;
 	vector<string> &command = commands[PCcurr];
 	if (instructions.find(command[0]) == instructions.end())
 	{
@@ -405,7 +405,8 @@ void MIPS_Core::handleError(int code)
 	cerr << "Error encountered in core " << id << " at:\n";
 	for (auto &s : commands[PCcurr])
 		cerr << s << ' ';
-	cerr << '\n';
+	cerr << "\n\n";
+	PCcurr = commands.size();
 }
 
 // initialize variables before executing commands
@@ -418,6 +419,5 @@ void MIPS_Core::initVars()
 	}
 	fill_n(registers, 32, 0);
 	fill_n(registersAddrDRAM, 32, make_pair(-1, -1));
-	lastAddr = {-1, -1};
-	toWrite = false;
+	writePending = false, writePortBusy = false;
 }

@@ -39,23 +39,23 @@ void DRAM::simulateExecution(int m)
 	priority.assign(cores.size(), -1);
 	DRAMbuffer.assign(cores.size(), unordered_map<int, unordered_map<int, queue<QElem>>>());
 
-	for (auto &core: cores)
+	for (auto &core : cores)
 		core->initVars();
 
-	while (MIPS_Core::clockCycles <= M && simulateCycle() == 0)
-		continue;
+	while (MIPS_Core::clockCycles <= M)
+		simulateCycle();
 
 	finishExecution();
 }
 
 // simulate a cycle execution
-int DRAM::simulateCycle()
+void DRAM::simulateCycle()
 {
 	for (int core = 0; core < (int)cores.size(); ++core)
 	{
 		int ret = cores[core]->executeCommand();
 		if (ret > 0)
-			return ret;
+			continue;
 		priority[core] = -ret - 1;
 	}
 
@@ -72,7 +72,6 @@ int DRAM::simulateCycle()
 	}
 
 	++MIPS_Core::clockCycles;
-	return 0;
 }
 
 // finish all (or some?) DRAM commands
@@ -103,11 +102,14 @@ void DRAM::finishCurrDRAM()
 	{
 		++rowBufferUpdates;
 		buffer[currCol] = top.value;
+		if (forwarding[currRow * ROWS + currCol * 4].first == top.issueCycle)
+			forwarding.erase(currRow * ROWS + currCol * 4);
 		printDRAMCompletion(top.core, top.PCaddr, top.startCycle, MIPS_Core::clockCycles);
 	}
 	else if (cores[top.core]->registersAddrDRAM[top.value] != make_pair(-1, -1))
 	{
-		cores[top.core]->toWrite = true;
+		if (cores[top.core]->writePortBusy)
+			cores[top.core]->writePending = true;
 		cores[top.core]->registers[top.value] = buffer[currCol];
 		if (cores[top.core]->registersAddrDRAM[top.value].first == top.issueCycle)
 		{
@@ -115,8 +117,6 @@ void DRAM::finishCurrDRAM()
 			if (priority[currCore] == top.value)
 				priority[currCore] = -1;
 		}
-		cores[top.core]->lastAddr.first = currCol * 4 + currRow * ROWS;
-		cores[top.core]->lastAddr.second = buffer[currCol];
 		printDRAMCompletion(top.core, top.PCaddr, top.startCycle, MIPS_Core::clockCycles);
 	}
 	else
@@ -165,7 +165,7 @@ void DRAM::setNextDRAM(int nextCore, int nextRow, int nextCol)
 // pop the queue element and update the row and column if needed (returns false if DRAM empty after pop)
 void DRAM::popAndUpdate(queue<QElem> &Q, int &core, int &row, int &col, bool skip)
 {
-	--DRAMsize, --totPending, --pendingCount[core], ++numProcessed, ++delay;
+	--DRAMsize, --totPending, --pendingCount[core], ++numProcessed, delay += 1 + skip;
 	if (MIPS_Core::clockCycles + delay / 2 > M)
 	{
 		--delay;
@@ -193,7 +193,7 @@ void DRAM::popAndUpdate(queue<QElem> &Q, int &core, int &row, int &col, bool ski
 	}
 	if (numProcessed == maxToProcess)
 	{
-		delay += 2;
+		delay += 2; // cyclic priority encoder :)
 		if (MIPS_Core::clockCycles + delay / 2 > M)
 			delay -= 2;
 		numProcessed = 0;

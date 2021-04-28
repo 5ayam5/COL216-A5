@@ -35,11 +35,12 @@ public:
 	vector<unordered_map<int, unordered_map<int, queue<QElem>>>> DRAMbuffer;
 	vector<MIPS_Core *> cores;
 	vector<int> pendingCount, priority;
+	unordered_map<int, pair<int, int>> forwarding;
 
 	DRAM(int rowDelay, int colDelay);
 
 	void simulateExecution(int m);
-	int simulateCycle();
+	void simulateCycle();
 	void finishExecution();
 	void finishCurrDRAM();
 	void setNextDRAM(int nextCore, int nextRow, int nextCol);

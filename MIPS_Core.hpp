@@ -23,9 +23,7 @@ struct MIPS_Core
 	int registers[32], PCcurr, PCnext, id;
 	static int clockCycles, instructionsCount;
 	pair<int, int> registersAddrDRAM[32];
-	// last location accessed by DRAM is stored
-	pair<int, int> lastAddr;
-	bool isDRAM, toWrite;
+	bool isDRAM, writePending, writePortBusy;
 	static DRAM *dram;
 
 
