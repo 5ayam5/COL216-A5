@@ -4,11 +4,10 @@
 \title{COL216 A-5 Write-up}
 \author{Sayam Sethi 2019CS10399 \\ Mallika Prabhakar 2019CS50440 }
 \date{April 2021}
-%this is a4 ka doc
 \begin{document}
 
 \maketitle
-
+% @TODO: change number of ports and functioning.
 \section{Assumptions}
 The following hardware assumptions were made in the design of the \textbf{MIPS Processor}:
 \begin{enumerate}
@@ -28,17 +27,9 @@ The following hardware assumptions were made in the design of the \textbf{MIPS P
     \item A \textbf{pair of \{address, value\}} which stores the value of the DRAM location last interacted with (stored to/ loaded from).
 \end{enumerate}
 
+% @TODO: add the implementation's time complexity as well
 
-\section{Changes and Additions to Minor Code}
-\begin{enumerate}
-    \item A new data type $QElem$ was created to contain all the necessary details for instructions
-    \item Variable changes: $registersBuffer$ changed to $registersAddrDRAM$, $lastAddr$ added
-    \item Instead of having the $updateRegisterBuffer$ function, we created functions $finishCurrDRAM$ and $setNextDRAM$ along with the helper function $popAndUpdate$ for the same purpose because of the change of queue into an unordered\_map of unordered\_map of queue for our modified implementation.
-    \item Following functions were modified: $addi$, $slt$, $op$, $bOP$, $lw$, $sw$,\\ $locateAddress$, $executeCommands$, $bufferUpdate$,\\ $printDRAMCompletion$, $printCycleExecution$, $initVars$ because of the same reason as stated above.
-    \item Remaining functions, namely- $MIPS\_Architecture$ (constructor), $add$, $sub$, $mul$, $beq$, $bne$, $j$, $checkLabel$, $checkRegister$, $checkRegisters$,\\ $parseCommand$, $constructCommands$, $printRegisters$, $handleExit$,\\ $main$ remained the same. 
-\end{enumerate}
-
-
+% @TODO: change implementation totally
 \section{Implementation}
 The idea to use a queue for every row and column arose from the fact that every $lw$ instruction requires the previous stores to that location be completed. The queue helped in ensuring this dependency. Then, to skip the redundant load instructions, the last address and the cycle in which the request has been issued has been stored which uniquely determines the instruction.\par
 The information pushed in the queue is the instruction type, value (register number for load, register value for store), and the cycle in which the request was issued. Other information stored is not required by the physical hardware, but by the simulator to print relevant information. This requires $1+32+32$ bits of memory. Thus, the complete queue requires $9\cdot32$ bytes of memory in the case a single bit cannot be stored separately.\par
@@ -50,6 +41,8 @@ Additionally, to save clock cycles, forwarding is implemented by storing the \{a
 
 \section{Strengths and Weaknesses}
 
+% @TODO: change both the sections completely
+
 \subsection{Strengths}
 The reordering of instructions is decided in such a way that it reduces the number of times the row buffer is written back and updated with a new buffer as much as possible.\par
 The design choice implements reordering (and skipping) of DRAM instructions with the least amount of additional data storage required. The heaviest part of the algorithm is the selection of the next instruction, which can happen in the same clock cycle in which a previous instruction is completed.\par
@@ -60,7 +53,11 @@ The maximum size of the \textbf{queue} is set as $32$ since this allows for maxi
 The design is kept as simple as possible to reduce the hardware complexity of the processor. This led to the pushing of every store instruction to the \textbf{queue} and the same leads to some redundant store operations. Removing this redundancy would lead to using a data structure whose size would be comparable to the data memory, i.e.\ $2^{20}$ bytes, hence the inefficiency of $sw$.\par
 The retrieval time for the next most optimal instruction has been kept as small as possible which has lead to the chance of selection of a slightly sub-optimal instruction at times (this is governed by the hash values of the row/column). To enhance the quality of selection, order of the arrival of instructions would need to be maintained which would lead to a slower selection (spanning over multiple clock cycles) and would require memory comparable to the size of the instructions (which, in the worst case can be equal to the size of the data memory, i.e.\ $2^{20}$ bytes).
 
+
+
 \section{Testing Strategy}
+% @TODO: Describe the folders broadly and change testing cases section
+
 Testing was carried keeping the following cases in mind:
 \begin{enumerate}
     \item Queuing up of DRAM instructions while safe instructions are executed in parallel.
@@ -70,16 +67,29 @@ Testing was carried keeping the following cases in mind:
 \end{enumerate}
 \subsection*{Test Cases:}
 \begin{enumerate}
-    \item \textbf{lw.asm -} single load word operation
-    \item \textbf{sw.asm -} single store word operation
-    \item \textbf{lwLocate.asm -} multiple load words at same location
-    \item \textbf{swLocate.asm -}  multiple store words at the same location
-    \item \textbf{size.asm -}  a large number of commands to show max size of data structure
-    \item \textbf{unsafeAddress -} testcase with address register unsafe
-    \item \textbf{random.asm -} initial testing of overwrite
-    \item \textbf{random2.asm -} rejected DRAM testing
-    \item \textbf{random3.asm -} a random testcase
-    \item \textbf{rand.asm -} to test reordering
+%see if cores change while running
+    \item \textbf{Test1 -} initial testcase to test multicore functionality
+%check smooth row changes
+    \item \textbf{Test2 -} testcase to test execution when row changes are needed (no dependent instructions)
+%
+    \item \textbf{Test3 -} tests execution when instructions are skipped + stopping a single core on error
+%
+    \item \textbf{Test4 -} wut
+%
+    \item \textbf{Test5 -} wut
+%
+    \item \textbf{Test6 -} wut
+%
+    \item \textbf{Test7 -} wut
+%
+    \item \textbf{Test8 -} wut
+%
+    \item \textbf{Test9 -} wut
+%
+    \item \textbf{Test9 -} wut
 \end{enumerate}
+
+
+
 
 \end{document}
