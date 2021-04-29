@@ -91,13 +91,10 @@ void DRAM::finishExecution()
 // finish the currently running DRAM instruction and set the next one
 void DRAM::finishCurrDRAM()
 {
-	auto &Q = DRAMbuffer[currCore][currRow][currCol];
 	int nextCore = currCore, nextRow = currRow, nextCol = currCol;
 	QElem top = DRAMbuffer[currCore][currRow][currCol].front();
 	delay = 0;
-	popAndUpdate(Q, nextCore, nextRow, nextCol);
 
-	MIPS_Core::clockCycles += top.remainingCycles;
 	if (!top.id)
 	{
 		++rowBufferUpdates;
@@ -114,14 +111,13 @@ void DRAM::finishCurrDRAM()
 		if (cores[top.core]->registersAddrDRAM[top.value].first == top.issueCycle)
 		{
 			cores[top.core]->registersAddrDRAM[top.value] = {-1, -1};
-			if (priority[currCore] == top.value)
-				priority[currCore] = -1;
 		}
 		printDRAMCompletion(top.core, top.PCaddr, top.startCycle, MIPS_Core::clockCycles);
 	}
 	else
 		printDRAMCompletion(top.core, top.PCaddr, top.startCycle, MIPS_Core::clockCycles, "rejected");
 
+	popAndUpdate(DRAMbuffer[currCore][currRow][currCol], nextCore, nextRow, nextCol);
 	setNextDRAM(nextCore, nextRow, nextCol);
 }
 
@@ -151,7 +147,7 @@ void DRAM::setNextDRAM(int nextCore, int nextRow, int nextCol)
 		return;
 	}
 
-	int selectionTime = delay / 2;
+	int selectionTime = delay;
 	if (selectionTime != 0)
 	{
 		int end = MIPS_Core::clockCycles + selectionTime;
@@ -165,8 +161,8 @@ void DRAM::setNextDRAM(int nextCore, int nextRow, int nextCol)
 // pop the queue element and update the row and column if needed (returns false if DRAM empty after pop)
 void DRAM::popAndUpdate(queue<QElem> &Q, int &core, int &row, int &col, bool skip)
 {
-	--DRAMsize, --totPending, --pendingCount[core], ++numProcessed, delay += 1 + skip;
-	if (MIPS_Core::clockCycles + delay / 2 > M)
+	--DRAMsize, --totPending, --pendingCount[core], ++numProcessed, delay += skip;
+	if (MIPS_Core::clockCycles + delay > M)
 	{
 		--delay;
 		return;
@@ -193,9 +189,9 @@ void DRAM::popAndUpdate(queue<QElem> &Q, int &core, int &row, int &col, bool ski
 	}
 	if (numProcessed == maxToProcess)
 	{
-		delay += 2; // cyclic priority encoder :)
-		if (MIPS_Core::clockCycles + delay / 2 > M)
-			delay -= 2;
+		++delay; // cyclic priority encoder :)
+		if (MIPS_Core::clockCycles + delay > M)
+			--delay;
 		numProcessed = 0;
 		int nextCore = cores.size();
 		for (int i = 1; i <= (int)cores.size(); ++i)

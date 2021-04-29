@@ -161,6 +161,12 @@ int MIPS_Core::lw(string r, string location, string unused1)
 	PCnext = PCcurr + 1;
 	if (dram->forwarding.find(address.second) != dram->forwarding.end())
 	{
+		if (writePending)
+		{
+			writePending = false;
+			cout << "Delayed by 1 cycle since DRAM writing to registers in this cycle\n";
+			return 0;
+		}
 		registers[registerMap[r]] = dram->forwarding[address.second].second;
 		registersAddrDRAM[registerMap[r]] = {-1, -1};
 		return 0;

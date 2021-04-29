@@ -14,7 +14,7 @@ int main(int argc, char *argv[])
 	int n = stoi(argv[2]), m = stoi(argv[3]), rowDelay = stoi(argv[4]), colDelay = stoi(argv[5]);
 	if (n > MIPS_Core::MAX_CORES)
 	{
-		cerr << "Cannot have more than 16 cores\n";
+		cerr << "Cannot have more than " << MIPS_Core::MAX_CORES <<" cores\n";
 		return 0;
 	}
 	string folder = string(argv[1]) + '/';

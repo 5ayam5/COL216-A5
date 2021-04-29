@@ -26,7 +26,6 @@ struct MIPS_Core
 	bool isDRAM, writePending, writePortBusy;
 	static DRAM *dram;
 
-
 	MIPS_Core(ifstream &file, int id);
 
 	int addi(string r1, string r2, string num);
