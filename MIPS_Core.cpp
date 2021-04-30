@@ -47,7 +47,7 @@ int MIPS_Core::addi(string r1, string r2, string num)
 			return -registerMap[r2] - 1;
 		if (writePending)
 		{
-			writePending = false;
+			--instructionsCount;
 			cout << "Delayed by 1 cycle since DRAM writing to registers in this cycle\n";
 			return 0;
 		}
@@ -98,7 +98,7 @@ int MIPS_Core::op(string r1, string r2, string r3, function<int(int, int)> opera
 		return -registerMap[r3] - 1;
 	if (writePending)
 	{
-		writePending = false;
+		--instructionsCount;
 		cout << "Delayed by 1 cycle since DRAM writing to registers in this cycle\n";
 		return 0;
 	}
@@ -158,26 +158,34 @@ int MIPS_Core::lw(string r, string location, string unused1)
 	if (!address.first)
 		return address.second;
 
-	PCnext = PCcurr + 1;
-	if (dram->forwarding.find(address.second) != dram->forwarding.end())
+	if (isForwarding)
 	{
 		if (writePending)
 		{
-			writePending = false;
+			--instructionsCount;
 			cout << "Delayed by 1 cycle since DRAM writing to registers in this cycle\n";
 			return 0;
 		}
-		registers[registerMap[r]] = dram->forwarding[address.second].second;
+		registers[registerMap[r]] = forwardedVal, isForwarding = false, writePortBusy = true;
+		PCnext = PCcurr + 1;
+		return 0;
+	}
+
+	if (dram->forwarding.find(address.second) != dram->forwarding.end())
+	{
+		--instructionsCount;
+		isForwarding = true;
+		forwardedVal = dram->forwarding[address.second].second;
 		registersAddrDRAM[registerMap[r]] = {-1, -1};
 		return 0;
 	}
 
-	if (dram->DRAMsize == DRAM::DRAM_MAX)
+	if (DRAMsize == DRAM::DRAM_MAX)
 		return -33;
 	isDRAM = true;
-	dram->DRAMbuffer[id][address.second / DRAM::ROWS][(address.second % DRAM::ROWS) / 4].push({id, 1, PCcurr, registerMap[r], clockCycles});
+	dram->DRAMbuffer[id][address.second / DRAM::ROWS].push({id, 1, PCcurr, registerMap[r], (address.second % DRAM::ROWS) / 4, clockCycles});
 	registersAddrDRAM[registerMap[r]] = {clockCycles, address.second};
-	++dram->pendingCount[id], ++dram->DRAMsize, ++dram->totPending, --instructionsCount;
+	++dram->pendingCount[id], ++DRAMsize, ++dram->totPending, --instructionsCount, PCnext = PCcurr + 1;
 	return 0;
 }
 
@@ -192,12 +200,12 @@ int MIPS_Core::sw(string r, string location, string unused1)
 	if (registersAddrDRAM[registerMap[r]] != make_pair(-1, -1))
 		return -registerMap[r] - 1;
 
-	if (dram->DRAMsize == DRAM::DRAM_MAX)
+	if (DRAMsize == DRAM::DRAM_MAX)
 		return -33;
 	dram->forwarding[address.second] = {clockCycles, registers[registerMap[r]]};
 	isDRAM = true;
-	dram->DRAMbuffer[id][address.second / DRAM::ROWS][(address.second % DRAM::ROWS) / 4].push({id, 0, PCcurr, registers[registerMap[r]], clockCycles});
-	++dram->pendingCount[id], ++dram->DRAMsize, ++dram->totPending, --instructionsCount;
+	dram->DRAMbuffer[id][address.second / DRAM::ROWS].push({id, 0, PCcurr, registers[registerMap[r]], (address.second % DRAM::ROWS) / 4, clockCycles});
+	++dram->pendingCount[id], ++DRAMsize, ++dram->totPending, --instructionsCount;
 	PCnext = PCcurr + 1;
 	return 0;
 }
@@ -348,6 +356,7 @@ int MIPS_Core::executeCommand()
 	if (ret != 0)
 		return ret;
 	printCycleExecution(command, PCcurr);
+	writePending = false;
 	PCcurr = PCnext, ++instructionsCount;
 	return 0;
 }
@@ -359,7 +368,7 @@ void MIPS_Core::printCycleExecution(vector<string> &command, int PCaddr)
 	if (isDRAM)
 		cout << clockCycles << ": (DRAM call queued) ";
 	else
-		cout << clockCycles << ": " << (command[0] == "lw" ? "(used forwarding) " : "");
+		cout << clockCycles << ": " << (command[0] == "lw" ? "(used forwarding" + string(isForwarding ? ", write in next cycle) " : ") ") : "");
 	cout << "(PC address " << PCaddr << ") ";
 	for (auto &s : command)
 		cout << s << ' ';
@@ -391,27 +400,27 @@ void MIPS_Core::handleError(int code)
 	switch (code)
 	{
 	case 1:
-		cerr << "Invalid register provided or syntax error in providing register\n";
+		cout << "Invalid register provided or syntax error in providing register\n";
 		break;
 	case 2:
-		cerr << "Label used not defined or defined too many times\n";
+		cout << "Label used not defined or defined too many times\n";
 		break;
 	case 3:
-		cerr << "Unaligned or invalid memory address specified\n";
+		cout << "Unaligned or invalid memory address specified\n";
 		break;
 	case 4:
-		cerr << "Syntax error encountered\n";
+		cout << "Syntax error encountered\n";
 		break;
 	case 5:
-		cerr << "Memory limit exceeded\n";
+		cout << "Memory limit exceeded\n";
 		break;
 	default:
 		return;
 	}
-	cerr << "Error encountered in core " << id << " at:\n";
+	cout << "Error encountered in core " << id << " at:\n";
 	for (auto &s : commands[PCcurr])
-		cerr << s << ' ';
-	cerr << "\n\n";
+		cout << s << ' ';
+	cout << "\n\n";
 	PCcurr = commands.size();
 }
 
@@ -425,5 +434,6 @@ void MIPS_Core::initVars()
 	}
 	fill_n(registers, 32, 0);
 	fill_n(registersAddrDRAM, 32, make_pair(-1, -1));
-	writePending = false, writePortBusy = false;
+	writePending = false, writePortBusy = false, isForwarding = false;
+	DRAMsize = 0;
 }

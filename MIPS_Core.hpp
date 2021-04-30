@@ -20,10 +20,10 @@ struct MIPS_Core
 	// vector to store the commands in input program
 	vector<vector<string>> commands;
 	// "dynamic" vars
-	int registers[32], PCcurr, PCnext, id;
+	int registers[32], PCcurr, PCnext, id, forwardedVal, DRAMsize;
 	static int clockCycles, instructionsCount;
 	pair<int, int> registersAddrDRAM[32];
-	bool isDRAM, writePending, writePortBusy;
+	bool isDRAM, writePending, writePortBusy, isForwarding;
 	static DRAM *dram;
 
 	MIPS_Core(ifstream &file, int id);

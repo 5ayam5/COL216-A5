@@ -5,19 +5,19 @@
  * @param id 0 for sw and 1 for lw
  * @param PCaddr stores the PC address of corresponding instruction
  * @param value content to be stored (for sw) / register id (for lw)
+ * @param colNum the column number of the request
  * @param issueCycle the cycle in which the request was issued
  * @param startCycle the cycle when the instruction began
- * @param remainingCycles number of cycles pending to finish execution of request
 */
-DRAM::QElem::QElem(int core, bool id, int PCaddr, int value, int issueCycle, int startCycle, int remainingCycles)
+DRAM::QElem::QElem(int core, bool id, int PCaddr, int value, int colNum, int issueCycle, int startCycle)
 {
 	this->id = id;
 	this->core = core;
 	this->PCaddr = PCaddr;
 	this->value = value;
+	this->colNum = colNum;
 	this->issueCycle = issueCycle;
 	this->startCycle = startCycle;
-	this->remainingCycles = remainingCycles;
 }
 
 DRAM::DRAM(int rowDelay, int colDelay)
@@ -33,11 +33,11 @@ void DRAM::simulateExecution(int m)
 {
 	M = m;
 	MIPS_Core::clockCycles = 1, MIPS_Core::instructionsCount = 0;
-	currCore = currRow = currCol = -1;
+	currCore = currRow = -1;
 	totPending = 0, numProcessed = 0;
 	pendingCount.assign(cores.size(), 0);
 	priority.assign(cores.size(), -1);
-	DRAMbuffer.assign(cores.size(), unordered_map<int, unordered_map<int, queue<QElem>>>());
+	DRAMbuffer.assign(cores.size(), unordered_map<int, queue<QElem>>());
 
 	for (auto &core : cores)
 		core->initVars();
@@ -65,9 +65,9 @@ void DRAM::simulateCycle()
 		if (currCore == -1)
 		{
 			int nextCore = find_if(pendingCount.begin(), pendingCount.end(), [](int &c) { return c != 0; }) - pendingCount.begin();
-			setNextDRAM(nextCore, DRAMbuffer[nextCore].begin()->first, DRAMbuffer[nextCore].begin()->second.begin()->first);
+			setNextDRAM(nextCore, DRAMbuffer[nextCore].begin()->first);
 		}
-		else if (--DRAMbuffer[currCore][currRow][currCol].front().remainingCycles == 0)
+		else if (--remainingCycles == 0)
 			finishCurrDRAM();
 	}
 
@@ -91,38 +91,40 @@ void DRAM::finishExecution()
 // finish the currently running DRAM instruction and set the next one
 void DRAM::finishCurrDRAM()
 {
-	int nextCore = currCore, nextRow = currRow, nextCol = currCol;
-	QElem top = DRAMbuffer[currCore][currRow][currCol].front();
+	int nextCore = currCore, nextRow = currRow;
+	QElem top = DRAMbuffer[currCore][currRow].front();
 	delay = 0;
 
 	if (!top.id)
 	{
 		++rowBufferUpdates;
-		buffer[currCol] = top.value;
-		if (forwarding[currRow * ROWS + currCol * 4].first == top.issueCycle)
-			forwarding.erase(currRow * ROWS + currCol * 4);
+		buffer[top.colNum] = top.value;
+		if (forwarding[currRow * ROWS + top.colNum * 4].first == top.issueCycle)
+			forwarding.erase(currRow * ROWS + top.colNum * 4);
 		printDRAMCompletion(top.core, top.PCaddr, top.startCycle, MIPS_Core::clockCycles);
 	}
 	else if (cores[top.core]->registersAddrDRAM[top.value] != make_pair(-1, -1))
 	{
 		if (cores[top.core]->writePortBusy)
 			cores[top.core]->writePending = true;
-		cores[top.core]->registers[top.value] = buffer[currCol];
+		cores[top.core]->registers[top.value] = buffer[top.colNum];
 		if (cores[top.core]->registersAddrDRAM[top.value].first == top.issueCycle)
 		{
 			cores[top.core]->registersAddrDRAM[top.value] = {-1, -1};
+			if (priority[top.core] == top.value)
+				priority[top.core] = -1;
 		}
 		printDRAMCompletion(top.core, top.PCaddr, top.startCycle, MIPS_Core::clockCycles);
 	}
 	else
 		printDRAMCompletion(top.core, top.PCaddr, top.startCycle, MIPS_Core::clockCycles, "rejected");
 
-	popAndUpdate(DRAMbuffer[currCore][currRow][currCol], nextCore, nextRow, nextCol);
-	setNextDRAM(nextCore, nextRow, nextCol);
+	popAndUpdate(DRAMbuffer[currCore][currRow], nextCore, nextRow);
+	setNextDRAM(nextCore, nextRow);
 }
 
 // set the next DRAM command to be executed (implements reordering)
-void DRAM::setNextDRAM(int nextCore, int nextRow, int nextCol)
+void DRAM::setNextDRAM(int nextCore, int nextRow)
 {
 	if (totPending == 0)
 	{
@@ -133,17 +135,14 @@ void DRAM::setNextDRAM(int nextCore, int nextRow, int nextCol)
 	{
 		int row = cores[nextCore]->registersAddrDRAM[priority[nextCore]].second / ROWS;
 		if (numProcessed == 0 || row == nextRow)
-		{
 			nextRow = row;
-			nextCol = (cores[nextCore]->registersAddrDRAM[priority[nextCore]].second % ROWS) / 4;
-		}
 	}
 
-	QElem top = DRAMbuffer[nextCore][nextRow][nextCol].front();
+	QElem top = DRAMbuffer[nextCore][nextRow].front();
 	if (top.id && cores[top.core]->registersAddrDRAM[top.value].first != top.issueCycle)
 	{
-		popAndUpdate(DRAMbuffer[nextCore][nextRow][nextCol], nextCore, nextRow, nextCol, true);
-		setNextDRAM(nextCore, nextRow, nextCol);
+		popAndUpdate(DRAMbuffer[nextCore][nextRow], nextCore, nextRow, true);
+		setNextDRAM(nextCore, nextRow);
 		return;
 	}
 
@@ -153,15 +152,15 @@ void DRAM::setNextDRAM(int nextCore, int nextRow, int nextCol)
 		int end = MIPS_Core::clockCycles + selectionTime;
 		cout << "(Memory manager) " << MIPS_Core::clockCycles << '-' << end << ": Deciding next instruction to execute" << (end > M ? " (but max clock cycles exceeded)" : "") << "\n\n";
 	}
-	bufferUpdate(nextCore, nextRow, nextCol);
-	DRAMbuffer[currCore][currRow][currCol].front().startCycle = MIPS_Core::clockCycles + 1 + selectionTime;
-	DRAMbuffer[currCore][currRow][currCol].front().remainingCycles = delay + selectionTime;
+	bufferUpdate(nextCore, nextRow);
+	DRAMbuffer[currCore][currRow].front().startCycle = MIPS_Core::clockCycles + 1 + selectionTime;
+	remainingCycles = delay + selectionTime;
 }
 
 // pop the queue element and update the row and column if needed (returns false if DRAM empty after pop)
-void DRAM::popAndUpdate(queue<QElem> &Q, int &core, int &row, int &col, bool skip)
+void DRAM::popAndUpdate(queue<QElem> &Q, int &core, int &row, bool skip)
 {
-	--DRAMsize, --totPending, --pendingCount[core], ++numProcessed, delay += skip;
+	--cores[core]->DRAMsize, --totPending, --pendingCount[core], ++numProcessed, delay += skip;
 	if (MIPS_Core::clockCycles + delay > M)
 	{
 		--delay;
@@ -173,14 +172,8 @@ void DRAM::popAndUpdate(queue<QElem> &Q, int &core, int &row, int &col, bool ski
 	++MIPS_Core::instructionsCount;
 	if (Q.empty())
 	{
-		DRAMbuffer[core][row].erase(col);
-		if (DRAMbuffer[core][row].empty())
-		{
-			DRAMbuffer[core].erase(row);
-			numProcessed = maxToProcess;
-		}
-		else
-			col = DRAMbuffer[core][row].begin()->first;
+		DRAMbuffer[core].erase(row);
+		numProcessed = maxToProcess;
 	}
 	if (totPending == 0)
 	{
@@ -209,12 +202,11 @@ void DRAM::popAndUpdate(queue<QElem> &Q, int &core, int &row, int &col, bool ski
 				}
 		core = nextCore;
 		row = DRAMbuffer[core].begin()->first;
-		col = DRAMbuffer[core][row].begin()->first;
 	}
 }
 
 // implement buffer update
-void DRAM::bufferUpdate(int core, int row, int col)
+void DRAM::bufferUpdate(int core, int row)
 {
 	if (row == -1)
 	{
@@ -228,7 +220,7 @@ void DRAM::bufferUpdate(int core, int row, int col)
 		delay = 2 * row_access_delay + col_access_delay, ++rowBufferUpdates, data[currRow] = buffer, buffer = data[row];
 	else
 		delay = col_access_delay;
-	currCore = core, currRow = row, currCol = col;
+	currCore = core, currRow = row;
 }
 
 // prints the cycle info of DRAM delay
