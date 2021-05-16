@@ -48,7 +48,7 @@ int MIPS_Core::addi(string r1, string r2, string num)
 		if (writePending)
 		{
 			--instructionsCount;
-			cout << "Delayed by 1 cycle since DRAM writing to registers in this cycle\n";
+			cout << "Will be delayed by 1 cycle since DRAM writing to registers in this cycle\n";
 			return 0;
 		}
 		registers[registerMap[r1]] = registers[registerMap[r2]] + stoi(num);
@@ -99,7 +99,7 @@ int MIPS_Core::op(string r1, string r2, string r3, function<int(int, int)> opera
 	if (writePending)
 	{
 		--instructionsCount;
-		cout << "Delayed by 1 cycle since DRAM writing to registers in this cycle\n";
+		cout << "Will be delayed by 1 cycle since DRAM writing to registers in this cycle\n";
 		return 0;
 	}
 	registers[registerMap[r1]] = operation(registers[registerMap[r2]], registers[registerMap[r3]]);
@@ -163,7 +163,7 @@ int MIPS_Core::lw(string r, string location, string unused1)
 		if (writePending)
 		{
 			--instructionsCount;
-			cout << "Delayed by 1 cycle since DRAM writing to registers in this cycle\n";
+			cout << "Will be delayed by 1 cycle since DRAM writing to registers in this cycle\n";
 			return 0;
 		}
 		registers[registerMap[r]] = forwardedVal, isForwarding = false, writePortBusy = true;
@@ -205,6 +205,7 @@ int MIPS_Core::sw(string r, string location, string unused1)
 	dram->forwarding[address.second] = {clockCycles, registers[registerMap[r]]};
 	isDRAM = true;
 	dram->DRAMbuffer[id][address.second / DRAM::ROWS].push({id, 0, PCcurr, registers[registerMap[r]], (address.second % DRAM::ROWS) / 4, clockCycles});
+	dram->latestSW[address.second] = clockCycles;
 	++dram->pendingCount[id], ++DRAMsize, ++dram->totPending, --instructionsCount;
 	PCnext = PCcurr + 1;
 	return 0;
@@ -377,13 +378,12 @@ void MIPS_Core::printCycleExecution(vector<string> &command, int PCaddr)
 	cout << "\n";
 }
 
-// print the register data in hexadecimal
+// print the register data
 void MIPS_Core::printRegisters()
 {
-	cout << hex;
 	for (int i = 0; i < 32; ++i)
 		cout << registers[i] << ' ';
-	cout << dec << "\n";
+	cout << "\n";
 }
 
 /*

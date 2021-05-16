@@ -28,6 +28,7 @@ public:
 	int row_access_delay, col_access_delay, maxToProcess;
 	// "dynamic" vars
 	int currCore, currRow, rowBufferUpdates, delay, totPending, numProcessed, M, remainingCycles;
+	bool dirty;
 	// data stored in allocated memory
 	vector<vector<int>> data;
 	vector<int> buffer;
@@ -36,6 +37,7 @@ public:
 	vector<MIPS_Core *> cores;
 	vector<int> pendingCount, priority;
 	unordered_map<int, pair<int, int>> forwarding;
+	unordered_map<int, int> latestSW;
 
 	DRAM(int rowDelay, int colDelay);
 
@@ -43,6 +45,7 @@ public:
 	void simulateCycle();
 	void finishExecution();
 	void finishCurrDRAM();
+	bool isRedundant(QElem &qElem, int row);
 	void setNextDRAM(int nextCore, int nextRow);
 	void popAndUpdate(queue<QElem> &Q, int &core, int &row, bool skip = false);
 	void bufferUpdate(int core = -1, int row = -1);

@@ -35,6 +35,7 @@ void DRAM::simulateExecution(int m)
 	MIPS_Core::clockCycles = 1, MIPS_Core::instructionsCount = 0;
 	currCore = currRow = -1;
 	totPending = 0, numProcessed = 0;
+	dirty = false;
 	pendingCount.assign(cores.size(), 0);
 	priority.assign(cores.size(), -1);
 	DRAMbuffer.assign(cores.size(), unordered_map<int, queue<QElem>>());
@@ -65,6 +66,7 @@ void DRAM::simulateCycle()
 		if (currCore == -1)
 		{
 			int nextCore = find_if(pendingCount.begin(), pendingCount.end(), [](int &c) { return c != 0; }) - pendingCount.begin();
+			delay = 1;
 			setNextDRAM(nextCore, DRAMbuffer[nextCore].begin()->first);
 		}
 		else if (--remainingCycles == 0)
@@ -78,14 +80,13 @@ void DRAM::simulateCycle()
 void DRAM::finishExecution()
 {
 	bufferUpdate();
-	cout << "\nThe Row Buffer was updated " << rowBufferUpdates << " times. (including update on final write-back)\n";
-	cout << "\nFollowing are the non-zero data values:\n";
+	cout << "Following are the non-zero data values:\n";
 	for (int i = 0; i < ROWS; ++i)
 		for (int j = 0; j < ROWS / 4; ++j)
 			if (data[i][j] != 0)
-				cout << (ROWS * i + 4 * j) << '-' << (ROWS * i + 4 * j) + 3 << hex << ": " << data[i][j] << '\n'
-					 << dec;
-	cout << "\nTotal number of instructions executed in " << M << " cycles is: " << MIPS_Core::instructionsCount << "\nIPC = " << MIPS_Core::instructionsCount * 1.0 / M << '\n';
+				cout << (ROWS * i + 4 * j) << '-' << (ROWS * i + 4 * j) + 3 << ": " << data[i][j] << '\n';
+	cout << "\nThe Row Buffer was updated " << rowBufferUpdates << " times. (including update on final write-back)\n";
+	cout << "Total number of instructions executed in " << M << " cycles is: " << MIPS_Core::instructionsCount << "\nIPC = " << MIPS_Core::instructionsCount * 1.0 / M << '\n';
 }
 
 // finish the currently running DRAM instruction and set the next one
@@ -97,6 +98,7 @@ void DRAM::finishCurrDRAM()
 
 	if (!top.id)
 	{
+		dirty = true;
 		++rowBufferUpdates;
 		buffer[top.colNum] = top.value;
 		if (forwarding[currRow * ROWS + top.colNum * 4].first == top.issueCycle)
@@ -123,6 +125,17 @@ void DRAM::finishCurrDRAM()
 	setNextDRAM(nextCore, nextRow);
 }
 
+bool DRAM::isRedundant(QElem &qElem, int row)
+{
+	if (qElem.id)
+		return cores[qElem.core]->registersAddrDRAM[qElem.value].first != qElem.issueCycle;
+	int address = row * ROWS + qElem.colNum * 4;
+	if (latestSW[address] != qElem.issueCycle)
+		return true;
+	latestSW.erase(address);
+	return false;
+}
+
 // set the next DRAM command to be executed (implements reordering)
 void DRAM::setNextDRAM(int nextCore, int nextRow)
 {
@@ -139,7 +152,7 @@ void DRAM::setNextDRAM(int nextCore, int nextRow)
 	}
 
 	QElem top = DRAMbuffer[nextCore][nextRow].front();
-	if (top.id && cores[top.core]->registersAddrDRAM[top.value].first != top.issueCycle)
+	if (isRedundant(top, nextRow))
 	{
 		popAndUpdate(DRAMbuffer[nextCore][nextRow], nextCore, nextRow, true);
 		setNextDRAM(nextCore, nextRow);
@@ -148,10 +161,8 @@ void DRAM::setNextDRAM(int nextCore, int nextRow)
 
 	int selectionTime = delay;
 	if (selectionTime != 0)
-	{
-		int end = MIPS_Core::clockCycles + selectionTime;
-		cout << "(Memory manager) " << MIPS_Core::clockCycles << '-' << end << ": Deciding next instruction to execute" << (end > M ? " (but max clock cycles exceeded)" : "") << "\n\n";
-	}
+		cout << "(Memory manager) " << MIPS_Core::clockCycles << '-' << MIPS_Core::clockCycles + selectionTime << ": Deciding next instruction to execute"
+			 << "\n\n";
 	bufferUpdate(nextCore, nextRow);
 	DRAMbuffer[currCore][currRow].front().startCycle = MIPS_Core::clockCycles + 1 + selectionTime;
 	remainingCycles = delay + selectionTime;
@@ -167,7 +178,7 @@ void DRAM::popAndUpdate(queue<QElem> &Q, int &core, int &row, bool skip)
 		return;
 	}
 	if (skip)
-		printDRAMCompletion(Q.front().core, Q.front().PCaddr, MIPS_Core::clockCycles + delay / 2, MIPS_Core::clockCycles + delay / 2, "skipped");
+		printDRAMCompletion(Q.front().core, Q.front().PCaddr, MIPS_Core::clockCycles + delay, MIPS_Core::clockCycles + delay, "skipped");
 	Q.pop();
 	++MIPS_Core::instructionsCount;
 	if (Q.empty())
@@ -211,16 +222,16 @@ void DRAM::bufferUpdate(int core, int row)
 	if (row == -1)
 	{
 		delay = (currRow != -1) * row_access_delay;
-		if (currRow != -1)
-			++rowBufferUpdates, data[currRow] = buffer, buffer = vector<int>();
+		if (currRow != -1 && dirty)
+			++rowBufferUpdates, data[currRow] = buffer;
 	}
 	else if (currRow == -1)
 		delay = row_access_delay + col_access_delay, ++rowBufferUpdates, buffer = data[row];
 	else if (currRow != row)
-		delay = 2 * row_access_delay + col_access_delay, ++rowBufferUpdates, data[currRow] = buffer, buffer = data[row];
+		delay = (1 + dirty) * row_access_delay + col_access_delay, ++rowBufferUpdates, data[currRow] = buffer, buffer = data[row];
 	else
 		delay = col_access_delay;
-	currCore = core, currRow = row;
+	currCore = core, currRow = row, dirty = false;
 }
 
 // prints the cycle info of DRAM delay
