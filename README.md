@@ -17,7 +17,6 @@ _Mallika Prabhakar  2019CS50440_
 10. run.sh
 
 ### Test cases: ###
-Test Categories:
 1. **Test1 -** Initial test case to test multi-core functionality
 2. **Test2 -** Test case to test execution when row changes are needed (no dependent instructions)
 3. **Test3 -** Tests execution when instructions are skipped + stopping a single core on error
