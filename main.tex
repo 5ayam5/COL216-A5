@@ -2,41 +2,51 @@
 \usepackage[utf8]{inputenc}
 
 \title{COL216 A-5 Write-up}
-\author{Sayam Sethi 2019CS10399 \\ Mallika Prabhakar 2019CS50440 }
+\author{Sayam Sethi 2019CS10399 \\ Mallika Prabhakar 2019CS50440}
 \date{April 2021}
 \begin{document}
 
+%Me happy. Doing assignment/making reports feel normal compared to tests and even though they are irritating, they feel good anyway. :')
+
 \maketitle
-% @TODO: change number of ports and functioning.
 \section{Assumptions}
 The following hardware assumptions were made in the design of the \textbf{MIPS Processor}:
 \begin{enumerate}
     \item There are \textbf{three ports} for communication with the processor:
         \begin{enumerate}
-            \item A \textbf{bidirectional port} with the \textbf{registers} (the call is issued at the beginning of cycle and result obtained within the same cycle).
-            \item An \textbf{output port} to send the DRAM request to the \textbf{DRAM queue} (explained in detail in the next point).
-            \item An \textbf{input port} to receive, and accept or reject the result of the DRAM request (with corresponding register updates, if any) after delay.
+            \item Two \textbf{output ports} to send the DRAM request to the \textbf{DRAM queue} (explained in detail in the next point) and signify if there is a ``priority load" required by the processor if it is being stalled.
+            \item An \textbf{input port} to receive, and accept or reject the result of the DRAM request after delay.
+            \item A \textbf{pair of \{address, value\}} for every register which stores the value of the latest DRAM address from which the value is to be loaded from.
+            \item The remaining hardware is the same as for a single pipeline MIPS processor.
+        \end{enumerate}
+    \item The \textbf{Memory Request Manager (MRM)} has the following hardware components and ports:
+        \begin{enumerate}
+            \item $N$ \textbf{buffer queues} (which is a fixed sized data segment, $size = 32$) for every core which stores the instructions send to the \textbf{MRM}. Detailed hardware structure is explained in the next section. A \textbf{counter} is also used to keep a track of the number of elements present in the segment.
+            \item A \textbf{sw-lw forwarding} register file which stores the latest value of \textbf{\{issue clock cycle, value\}} for the address(es) which are currently present in the \textbf{buffer queue}.
+            \item Two \textbf{cyclic priority encoders} which helps decide the core whose instruction is to be processed next.
+            \item $2\times N$ \textbf{input ports} which receive the DRAM requests from the cores and the priority signals from the cores.
+            \item $N$ \textbf{output ports} which return the DRAM load results to the cores.
+            \item Two more \textbf{counters} which keep a track of the number of instructions processed in the current row and cycles remaining for the current request to be processed.
+            \item Two \textbf{registers} which store the current core and row whose request is being serviced.
         \end{enumerate}
     \item The \textbf{DRAM architecture} is as follows:
         \begin{enumerate}
-            \item It contains a \textbf{2D square array} of $1024$ rows with each row having $1024$ bytes ($256$ words).
-            \item It contains another storage location called the \textbf{Row buffer} which is used to store the current memory retrieval row.
-            \item To implement non-blocking and reordering of the DRAM, a \textbf{queue} is also present which contains all the required information about the pending load/store instructions. It is used to execute the DRAM instructions and also determine which instruction to execute next (or ignore). It can store atmost $32$ instructions at a time.
+            \item It contains a \textbf{2D square array} of $1024$ rows with each row having $1024$ bytes ($256$ words). This memory segment is divided into $N$ blocks to separate the memory locations accessible by the cores.
+            \item It contains another storage location called the \textbf{row buffer} which is used to store the current memory retrieval row.
         \end{enumerate}
-    \item There is a \textbf{common access \{cycle, address\} pair} which keeps a track of the last instruction which loads a value into each register. It can be accessed by both the processor and the DRAM.
-    \item A \textbf{pair of \{address, value\}} which stores the value of the DRAM location last interacted with (stored to/ loaded from).
 \end{enumerate}
+Note: $N$ is taken to be $16$ in our implementation, however the value can be changed to any number that is a factor of $1024$.
 
-% @TODO: add the implementation's time complexity as well
 
 % @TODO: change implementation totally
 \section{Implementation}
-The idea to use a queue for every row and column arose from the fact that every $lw$ instruction requires the previous stores to that location be completed. The queue helped in ensuring this dependency. Then, to skip the redundant load instructions, the last address and the cycle in which the request has been issued has been stored which uniquely determines the instruction.\par
-The information pushed in the queue is the instruction type, value (register number for load, register value for store), and the cycle in which the request was issued. Other information stored is not required by the physical hardware, but by the simulator to print relevant information. This requires $1+32+32$ bits of memory. Thus, the complete queue requires $9\cdot32$ bytes of memory in the case a single bit cannot be stored separately.\par
-The idea for execution of the instruction is the same as that used in the minor code. However, popping of the queue and setting the next instruction is changed to incorporate reordering and priority selection.\par
-In the case of no priority, i.e., when there is no dependent instruction which requires immediate execution, an instruction of the same column is attempted to be executed. If the queue of that column is empty, then an instruction of the same row is attempted to be executed. If the row is empty too, then the first element of the unordered\_map is chosen. In the case of priority, the required \{row, column\} is chosen.\par
-Before choosing the next instruction, in the case of a load instruction, the \{last address, cycle number\} is matched with the corresponding register. If it doesn't match, then that element is simply popped from the queue without executing it.\par
-Additionally, to save clock cycles, forwarding is implemented by storing the \{address, value\} of the last interaction with DRAM. Also, rejection of DRAM requests is introduced which helps in execution of ``unsafe" instructions updating a register having an ongoing DRAM load and marking that instruction as safe.
+
+% @TODO: add the implementation's time complexity as well
+\subsection{Algorithm}
+The idea behind our implementation is to ensure that all cores are serviced as soon as possible and no core is left waiting for too long. The \textbf{MRM} has separate buffers for every core, which has a maximum size of $32$ requests each. The buffer is implemented as an \textit{unordered map} of \textit{queue} which helps service the requests sequentially for every row.\par
+When the requests are sent to the \textbf{MRM} for the first time (or after the \textbf{MRM} was emptied), it selects the first core which has a request that has been sent to the buffer. In the subsequent selections, it selects requests from the same row (and hence the same core)
+
+\subsection{Hardware Perspective}
 
 
 \section{Strengths and Weaknesses}
@@ -57,6 +67,7 @@ The retrieval time for the next most optimal instruction has been kept as small 
 
 \section{Testing Strategy}
 % @TODO: Describe the folders broadly and change testing cases section
+% @TODO: add more tests
 
 Testing was carried keeping the following cases in mind:
 \begin{enumerate}
@@ -73,12 +84,12 @@ Testing was carried keeping the following cases in mind:
     \item \textbf{Test2 -} testcase to test execution when row changes are needed (no dependent instructions)
 %
     \item \textbf{Test3 -} tests execution when instructions are skipped + stopping a single core on error
+% random cases involving dependencies in all cores
+    \item \textbf{OnlyStores -} the name is suggestive % stink eye
 %
-    \item \textbf{Test4 -} wut
+    \item \textbf{Prep -} Each core respectively: dependent loads, no DRAM, forwarding
 %
-    \item \textbf{Test5 -} wut
-%
-    \item \textbf{Test6 -} wut
+    \item \textbf{Unsafes -} Unsafe instructions in all cores (forwarding happens in 2 out of 4 cores).
 %
     \item \textbf{Test7 -} wut
 %
