@@ -28,7 +28,8 @@ chmod +x run.sh
 8. MIPS_Core.cpp
 9. MIPS_Core.hpp
 10. overview.py
-11. run.sh
+11. README.md
+12. run.sh
 
 ### Test cases: ###
 1. **Test1 -** Initial test case to test multi-core functionality
