@@ -37,7 +37,6 @@ public:
 	vector<MIPS_Core *> cores;
 	vector<int> pendingCount, priority;
 	unordered_map<int, pair<int, int>> forwarding;
-	unordered_map<int, int> latestSW;
 
 	DRAM(int rowDelay, int colDelay);
 

@@ -129,10 +129,8 @@ bool DRAM::isRedundant(QElem &qElem, int row)
 {
 	if (qElem.id)
 		return cores[qElem.core]->registersAddrDRAM[qElem.value].first != qElem.issueCycle;
-	int address = row * ROWS + qElem.colNum * 4;
-	if (latestSW[address] != qElem.issueCycle)
+	if (forwarding[row * ROWS + qElem.colNum * 4].first != qElem.issueCycle)
 		return true;
-	latestSW.erase(address);
 	return false;
 }
 

@@ -205,7 +205,6 @@ int MIPS_Core::sw(string r, string location, string unused1)
 	dram->forwarding[address.second] = {clockCycles, registers[registerMap[r]]};
 	isDRAM = true;
 	dram->DRAMbuffer[id][address.second / DRAM::ROWS].push({id, 0, PCcurr, registers[registerMap[r]], (address.second % DRAM::ROWS) / 4, clockCycles});
-	dram->latestSW[address.second] = clockCycles;
 	++dram->pendingCount[id], ++DRAMsize, ++dram->totPending, --instructionsCount;
 	PCnext = PCcurr + 1;
 	return 0;

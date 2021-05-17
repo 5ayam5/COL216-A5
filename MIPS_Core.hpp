@@ -12,7 +12,7 @@ struct DRAM;
 struct MIPS_Core
 {
 	// maximum size of instruction set
-	static const int MAX = 1 << 8, MAX_CORES = 16;
+	static const int MAX = 1 << 8, MAX_CORES = 1 << 4;
 	// instruction set
 	unordered_map<string, function<int(MIPS_Core &, string, string, string)>> instructions;
 	// mapping names to a unique number
