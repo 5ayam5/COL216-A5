@@ -19,15 +19,16 @@ chmod +x run.sh
 ```
 ### Files: ###
 1. Assignment-5.pdf
-2. DRAM.cpp
-3. DRAM.hpp
-4. main.cpp
-5. main.tex
-6. makefile
-7. MIPS_Core.cpp
-8. MIPS_Core.hpp
-9. overview.py
-10. run.sh
+2. COL216_A5.pdf
+3. DRAM.cpp
+4. DRAM.hpp
+5. main.cpp
+6. main.tex
+7. makefile
+8. MIPS_Core.cpp
+9. MIPS_Core.hpp
+10. overview.py
+11. run.sh
 
 ### Test cases: ###
 1. **Test1 -** Initial test case to test multi-core functionality
