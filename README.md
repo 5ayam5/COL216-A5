@@ -5,15 +5,15 @@ _Mallika Prabhakar  2019CS50440_
 ## Contents: ##
 
 ### Files: ###
-Assignment-5.pdf
-DRAM.cpp
-DRAM.hpp
-main.cpp
-main.tex
-makefile
-MIPS_Core.cpp
-MIPS_Core.hpp
-overview.py
+Assignment-5.pdf\
+DRAM.cpp\
+DRAM.hpp\
+main.cpp\
+main.tex\
+makefile\
+MIPS_Core.cpp\
+MIPS_Core.hpp\
+overview.py\
 run.sh
 
 ### Test cases: ###
