@@ -6,7 +6,6 @@
 \date{April 2021}
 \begin{document}
 
-%Me happy. Doing assignment/making reports feel normal compared to tests and even though they are irritating, they feel good anyway. :')
 
 \maketitle
 \section{Assumptions}
@@ -14,7 +13,7 @@ The following hardware assumptions were made in the design of the \textbf{MIPS P
 \begin{enumerate}
     \item There are \textbf{three ports} for communication with the processor:
         \begin{enumerate}
-            \item Two \textbf{output ports} to send the DRAM request to the \textbf{DRAM queue} (explained in detail in the next point) and signify if there is a ``priority load" required by the processor if it is being stalled.
+            \item Two \textbf{output ports} to send the DRAM request to the \textbf{DRAM queue} (explained in detail in the next point) and signify if there is a ``priority load" required by the processor if it is being stalled, respectively.
             \item An \textbf{input port} to receive, and accept or reject the result of the DRAM request after delay.
             \item A \textbf{pair of \{address, value\}} for every register which stores the value of the latest DRAM address from which the value is to be loaded from.
             \item The remaining hardware is the same as for a single pipeline MIPS processor.
@@ -38,10 +37,7 @@ The following hardware assumptions were made in the design of the \textbf{MIPS P
 Note: $N$ is taken to be $16$ in our implementation, however the value can be changed to any number that is a factor of $1024$.
 
 
-% @TODO: change implementation totally
 \section{Implementation}
-
-% @TODO: add the implementation's time complexity as well
 \subsection{Algorithm}
 Note: The hardware specifications and decision delays are discussed in the next subsection\par
 The idea behind our implementation is to ensure that all cores are serviced as soon as possible and no core is left waiting for too long. The \textbf{MRM} has separate buffers for every core, which has a maximum size of $32$ requests each. The buffer is implemented as an \textit{unordered map} of \textit{queue} which helps service the requests sequentially for every row.\par
@@ -55,63 +51,55 @@ Now, if all the requests of the current row are processed or $maxToProcess$ ($ma
 \end{itemize}
 
 \subsection{Hardware Perspective}
+The delays have been evaluated under the following assumptions:
+\begin{enumerate}
+    \item The processor sends requests to the \textbf{MRM} before the falling edge of the current clock cycle (so that the information is available during the next clock edge).
+    \item The clock cycle is large enough that about 5 sequential operations can be performed in a single clock cycle. This is necessary since the processor performs IF, ID, Registers, ALU control, ALU.
+\end{enumerate}
+
 \subsubsection*{Buffer Queue}
+The buffer queue is a data segment which has a maximum size of $32$ for every core. The requests sent by the processor is ``pushed" to this queue. It has a similar to linked list implementation, where the position of the next element of the queue is stored in the current element. When creating a new queue, an algorithm similar to that used for hashing is used. This on an average is $O(1)$ operation and will complete in one clock cycle. Thus when the \textbf{MRM} selects the next instruction, it happens towards the end of the clock cycle and hence takes one complete cycle to select the next instruction to execute (when in the same row).\par
+When priority encoder is involved to select the next core, another clock cycle is used to obtain the result from the encoders and then the optimal row is selected from the core of the output of the encoder.
 
 \subsubsection*{Forwarding Pipeline Register}
-It is similar to the pipeline register taught in the lectures and stores the 
+It is similar to the pipeline register taught in the lectures and stores the \{issue clock cycle, value\} for the addresses that have pending sw requests to be processed by the DRAM. The mapping is similar to that which is used by a cache. The result is returned one cycle after the request is sent to the \textbf{MRM} in which the \textbf{MRM} determines the forwarding value.
+
+\subsubsection*{Cyclic Priority Encoders}
+If the core whose request to process has to be changed, the values from the cyclic priority encoders is read. It is different from a priority encoder in the sense that the priority changes cyclically with the core just after the current core having the largest priority. This uses a combinational circuit and hence returns the result with a delay comparable to only delays of logic gates.
 
 
 \section{Strengths and Weaknesses}
-
-% @TODO: change both the sections completely
-
 \subsection{Strengths}
-The reordering of instructions is decided in such a way that it reduces the number of times the row buffer is written back and updated with a new buffer as much as possible.\par
-The design choice implements reordering (and skipping) of DRAM instructions with the least amount of additional data storage required. The heaviest part of the algorithm is the selection of the next instruction, which can happen in the same clock cycle in which a previous instruction is completed.\par
-The skipping of instructions helps in avoiding a lot of redundant loads which reduce the number of cycles taken to execute the code by a lot. Forwarding of instructions ensures that if the user is working with a particular location in the memory, the load time is greatly reduced.\par
-The maximum size of the \textbf{queue} is set as $32$ since this allows for maximum data capacity without having the need to make the DRAM access blocking (on reaching maximum size). Any larger would lead to unused memory for most of the times and any smaller would lead to frequent blocking.
+\begin{itemize}
+    \item Forwarding helps save a lot of cycles especially when there more pending instructions, this helps in ensuring that stalling does not cascade (if any) and the pending instructions do not keep on increasing.
+    \item Every redundant instruction is not processed and this increased the instructions per cycle greatly. In the case when a redundant instruction was being processed by the DRAM, it is rejected by the processor (this saves cycles too by not stalling for the request to finish processing).
+    \item Writeback happens only when the buffer was dirty, this saves clock cycles in a lot of cases and decreases the time taken to switch rows by $50\%$
+    \item Starvation handling was done which helped improved the performance of the \textbf{MRM} for large number of cores and a large number of cycles. As the total number of instructions per core are increased, the eficiency of the manager improves.
+    \item The operations of the decision making of the \textbf{MRM} happen independently of the core execution, which avoids stalling of processor instructions. This also ensures that on an asymptotic scale, the $rowAccessDelay$ is increased by a factor of $1.5$, along with the number of instructions processed per row switch becomes $5\times$.
+    \item Every core is allocated an individual \textbf{buffer queue} which ensures that the requests can be pushed independently of other cores and the pending requests in other cores doesn't limit the number of request that can be sent by a particular core.
+\end{itemize}
 
 \subsection{Weaknesses}
-The design is kept as simple as possible to reduce the hardware complexity of the processor. This led to the pushing of every store instruction to the \textbf{queue} and the same leads to some redundant store operations. Removing this redundancy would lead to using a data structure whose size would be comparable to the data memory, i.e.\ $2^{20}$ bytes, hence the inefficiency of $sw$.\par
-The retrieval time for the next most optimal instruction has been kept as small as possible which has lead to the chance of selection of a slightly sub-optimal instruction at times (this is governed by the hash values of the row/column). To enhance the quality of selection, order of the arrival of instructions would need to be maintained which would lead to a slower selection (spanning over multiple clock cycles) and would require memory comparable to the size of the instructions (which, in the worst case can be equal to the size of the data memory, i.e.\ $2^{20}$ bytes).
+\begin{itemize}
+    \item To ensure that all cores have equal priorities and minimal effects of other cores, a lot of additional memory is needed in the \textbf{MRM}. Thus, it has a slightly larger component cost, proportional to $N$.
+    \item Since the data structure for the DRAM request is somewhat complicated, the pushing of instructions is relatively slow as compared to other processes being executed in the \textbf{MRM}. This is the limiting process for the \textbf{MRM} delays.
+    \item Our implementation provides sufficient ``bubble time" to ensure that the \textbf{MRM} instructions execute within a single clock cycle. However, more instructions could have been squeezed in the MRM in a single clock cycle by decreasing the ``bubble time".
+\end{itemize}
 
 
-
-\section{Testing Strategy}
-% @TODO: to add test 5, test 6 and test 7
-
-Testing was carried keeping the following cases in mind:
+\section{Test Cases:}
 \begin{enumerate}
-    \item Queuing up of DRAM instructions while safe instructions are executed in parallel.
-    \item Queuing up of instructions along with an unsafe instruction requiring a pending instruction to be completed.
-    \item Multiple load/store instructions involving the same register so that the queue handling is tested effectively.
-    \item Tested on large cases which were give for Assignment 3 and Minor which had some other combinations of cases that were not handled above.
+    \item \textbf{Test1 -} Initial test case to test multi-core functionality
+    \item \textbf{Test2 -} Test case to test execution when row changes are needed (no dependent instructions)
+    \item \textbf{Test3 -} Tests execution when instructions are skipped + stopping a single core on error
+    \item \textbf{Test4 -} Contains primarily store expressions in the files
+    \item \textbf{Test5 -} Each core respectively: dependent loads, no DRAM, forwarding (reduction of cycles from about 450 cycles to 271 cycles compared to Assignment 4 implementation)
+    \item \textbf{Test6 -} Unsafe instructions in all cores (forwarding happens in some of the cores)
+    \item \textbf{Test7 -} Collection of files provided in Assignment 4 demonstration to be run in a parallel manner
+    \item \textbf{Test8 -} Random test case 1 (random)
+    \item \textbf{Test9 -} Random test case 2 (negative address)
+    \item \textbf{Test10 -} Random test case 3 (normal files and erroneous files run in parallel)
 \end{enumerate}
-\subsection*{Test Cases:}
-\begin{enumerate}
-%see if cores change while running
-    \item \textbf{Test1 -} initial test case to test multi-core functionality
-%check smooth row changes
-    \item \textbf{Test2 -} test case to test execution when row changes are needed (no dependent instructions)
-%
-    \item \textbf{Test3 -} tests execution when instructions are skipped + stopping a single core on error
-% random cases involving dependencies in all cores
-    \item \textbf{Only Stores -} the name is suggestive (contains primarily store expressions in the files % stink eye
-%
-    \item \textbf{Prep -} Each core respectively: dependent loads, no DRAM, forwarding
-%
-    \item \textbf{Unsafes -} Unsafe instructions in all cores (forwarding happens in 2 out of 4 cores)
-%
-    \item \textbf{Test4 -} Collection of files provided in Assignment 4 demonstration to be run in a parallel manner
-%
-    \item \textbf{Test5 -} Random test case 1
-%
-    \item \textbf{Test6 -} Random test case 2
-%
-    \item \textbf{Test7 -} Random test case 3
-\end{enumerate}
-
-
 
 
 \end{document}
