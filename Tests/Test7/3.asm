@@ -1,10 +1,33 @@
-addi $t0, $zero, 10
-addi $t1, $zero, 20
-addi $t2, $t1, 20
-addi $s0, $zero, 1020
-addi $s1, $t2, 2000
-lw $t2, 0($s1)
+main:
+	addi $s1, $zero, 5
 
-sw $t0, 0($s0)
-sw $t1, 0($s1)
-lw $t1, 0($s0)
+	addi $s0, $zero, 0
+	lw $t0, 1000($s0)
+
+ 	addi $s0, $s0, 4
+	lw $t1, 3000($s0)
+
+	addi $s0, $s0, 4
+	lw $t2, 1000($s0)
+	
+	addi $s0, $s0, 4
+	lw $t3, 3000($s0)
+	
+	addi $s0, $s0, 4
+	lw $t4, 1000($s0)
+
+	addi $s0, $s0, 4
+	lw $t5, 3000($s0)
+	
+	addi $s0, $s0, 4
+	lw $t6, 1000($s0)
+
+	lw $t7, 3000($s0)
+
+#	lw $t8, 1000($s0)
+
+	addi $s3, $zero, 100
+	add $s4, $s0, $s1
+	add $s5, $t0, $s4
+
+exit:
