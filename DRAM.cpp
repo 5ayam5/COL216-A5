@@ -94,7 +94,7 @@ void DRAM::finishCurrDRAM()
 {
 	int nextCore = currCore, nextRow = currRow;
 	QElem top = DRAMbuffer[currCore][currRow].front();
-	delay = 0;
+	delay = 1;
 
 	if (!top.id)
 	{
@@ -129,9 +129,7 @@ bool DRAM::isRedundant(QElem &qElem, int row)
 {
 	if (qElem.id)
 		return cores[qElem.core]->registersAddrDRAM[qElem.value].first != qElem.issueCycle;
-	if (forwarding[row * ROWS + qElem.colNum * 4].first != qElem.issueCycle)
-		return true;
-	return false;
+	return forwarding[row * ROWS + qElem.colNum * 4].first != qElem.issueCycle;
 }
 
 // set the next DRAM command to be executed (implements reordering)
@@ -142,12 +140,8 @@ void DRAM::setNextDRAM(int nextCore, int nextRow)
 		currCore = -1;
 		return;
 	}
-	if (priority[nextCore] != -1)
-	{
-		int row = cores[nextCore]->registersAddrDRAM[priority[nextCore]].second / ROWS;
-		if (numProcessed == 0 || row == nextRow)
-			nextRow = row;
-	}
+	if (numProcessed == 0 && priority[nextCore] != -1 && priority[nextCore] != 32)
+		nextRow = cores[nextCore]->registersAddrDRAM[priority[nextCore]].second / ROWS;
 
 	QElem top = DRAMbuffer[nextCore][nextRow].front();
 	if (isRedundant(top, nextRow))
@@ -191,9 +185,9 @@ void DRAM::popAndUpdate(queue<QElem> &Q, int &core, int &row, bool skip)
 	}
 	if (numProcessed == maxToProcess)
 	{
-		++delay; // cyclic priority encoder :)
+		delay += 2;
 		if (MIPS_Core::clockCycles + delay > M)
-			--delay;
+			delay -= 2;
 		numProcessed = 0;
 		int nextCore = cores.size();
 		for (int i = 1; i <= (int)cores.size(); ++i)
