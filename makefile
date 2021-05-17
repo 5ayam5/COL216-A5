@@ -10,4 +10,4 @@ DRAM.o: DRAM.cpp DRAM.hpp MIPS_Core.hpp
 	g++ -c DRAM.cpp -std=c++17 -Wall -Wextra
 
 clean:
-	rm -f DRAM.o MIPS_Core.o main
+	rm -f DRAM.o MIPS_Core.o main Tests/*/out summary
