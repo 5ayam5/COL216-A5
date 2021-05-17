@@ -2,8 +2,21 @@
 _Sayam Sethi        2019CS10399_\
 _Mallika Prabhakar  2019CS50440_
 
-## Contents: ##
-
+### Running instructions: ###
+Clone the repository and go to directory COL216-A5\
+Then run-
+```
+./run.sh
+```
+If following error occurs-
+```
+bash: ./run.sh: Permission denied
+```
+run-
+```
+chmod +x run.sh
+./run.sh
+```
 ### Files: ###
 1. Assignment-5.pdf
 2. DRAM.cpp
