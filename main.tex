@@ -22,7 +22,7 @@ The following hardware assumptions were made in the design of the \textbf{MIPS P
     \item The \textbf{Memory Request Manager (MRM)} has the following hardware components and ports:
         \begin{enumerate}
             \item $N$ \textbf{buffer queues} (which is a fixed sized data segment, $size = 32$) for every core which stores the instructions send to the \textbf{MRM}. Detailed hardware structure is explained in the next section. A \textbf{counter} is also used to keep a track of the number of elements present in the segment.
-            \item A \textbf{sw-lw forwarding} register file which stores the latest value of \textbf{\{issue clock cycle, value\}} for the address(es) which are currently present in the \textbf{buffer queue}.
+            \item A sw-lw forwarding \textbf{pipeline register} which stores the latest value of \textbf{\{issue clock cycle, value\}} for the address(es) which are currently present in the \textbf{buffer queue}.
             \item Two \textbf{cyclic priority encoders} which helps decide the core whose instruction is to be processed next.
             \item $2\times N$ \textbf{input ports} which receive the DRAM requests from the cores and the priority signals from the cores.
             \item $N$ \textbf{output ports} which return the DRAM load results to the cores.
@@ -43,10 +43,22 @@ Note: $N$ is taken to be $16$ in our implementation, however the value can be ch
 
 % @TODO: add the implementation's time complexity as well
 \subsection{Algorithm}
+Note: The hardware specifications and decision delays are discussed in the next subsection\par
 The idea behind our implementation is to ensure that all cores are serviced as soon as possible and no core is left waiting for too long. The \textbf{MRM} has separate buffers for every core, which has a maximum size of $32$ requests each. The buffer is implemented as an \textit{unordered map} of \textit{queue} which helps service the requests sequentially for every row.\par
-When the requests are sent to the \textbf{MRM} for the first time (or after the \textbf{MRM} was emptied), it selects the first core which has a request that has been sent to the buffer. In the subsequent selections, it selects requests from the same row (and hence the same core)
+When the requests are sent to the \textbf{MRM} for the first time (or after the \textbf{MRM} was emptied), it selects the first core which has a request that has been sent to the buffer. In the subsequent selections, it selects requests from the same row (and hence the same core), if requests are available.\par
+Now, if all the requests of the current row are processed or $maxToProcess$ ($maxToProcess = \frac{rowAccessDelay}{colAccessDelay}$) number of instructions have been serviced from the current row, the \textbf{MRM} decides which core, row to service next. This is determined by cyclically selecting the next core which has a priority load, if any. If no core has a priority load, then the next core with a pending request is cyclically selected. If the core was selected using priority, $maxToProcess$ ensures that no core is left \textbf{starving} and cyclic selection ensures that no core gets more priority when deciding which request to serve.
+\subsubsection*{Other Optimisations:}
+\begin{itemize}
+    \item \textbf{Forwarding:} sw to lw forwarding is implemented using a register file (pipelining registers) present in the \textbf{MRM}
+    \item \textbf{Skipping Redundant Instructions:} If there are multiple lw instructions for the same register, only the most recent request is sent to the DRAM and the others are skipped. Similar implementation is done for multiple sw instructions.
+    \item \textbf{Dirty-only Write-back:} Write-back only when the buffer is dirty, else no write-back.
+\end{itemize}
 
 \subsection{Hardware Perspective}
+\subsubsection*{Buffer Queue}
+
+\subsubsection*{Forwarding Pipeline Register}
+It is similar to the pipeline register taught in the lectures and stores the 
 
 
 \section{Strengths and Weaknesses}
@@ -66,8 +78,7 @@ The retrieval time for the next most optimal instruction has been kept as small 
 
 
 \section{Testing Strategy}
-% @TODO: Describe the folders broadly and change testing cases section
-% @TODO: add more tests
+% @TODO: to add test 5, test 6 and test 7
 
 Testing was carried keeping the following cases in mind:
 \begin{enumerate}
@@ -79,25 +90,25 @@ Testing was carried keeping the following cases in mind:
 \subsection*{Test Cases:}
 \begin{enumerate}
 %see if cores change while running
-    \item \textbf{Test1 -} initial testcase to test multicore functionality
+    \item \textbf{Test1 -} initial test case to test multi-core functionality
 %check smooth row changes
-    \item \textbf{Test2 -} testcase to test execution when row changes are needed (no dependent instructions)
+    \item \textbf{Test2 -} test case to test execution when row changes are needed (no dependent instructions)
 %
     \item \textbf{Test3 -} tests execution when instructions are skipped + stopping a single core on error
 % random cases involving dependencies in all cores
-    \item \textbf{OnlyStores -} the name is suggestive % stink eye
+    \item \textbf{Only Stores -} the name is suggestive (contains primarily store expressions in the files % stink eye
 %
     \item \textbf{Prep -} Each core respectively: dependent loads, no DRAM, forwarding
 %
-    \item \textbf{Unsafes -} Unsafe instructions in all cores (forwarding happens in 2 out of 4 cores).
+    \item \textbf{Unsafes -} Unsafe instructions in all cores (forwarding happens in 2 out of 4 cores)
 %
-    \item \textbf{Test7 -} wut
+    \item \textbf{Test4 -} Collection of files provided in Assignment 4 demonstration to be run in a parallel manner
 %
-    \item \textbf{Test8 -} wut
+    \item \textbf{Test5 -} Random test case 1
 %
-    \item \textbf{Test9 -} wut
+    \item \textbf{Test6 -} Random test case 2
 %
-    \item \textbf{Test9 -} wut
+    \item \textbf{Test7 -} Random test case 3
 \end{enumerate}
 
 
