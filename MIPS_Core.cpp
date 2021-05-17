@@ -225,7 +225,7 @@ pair<bool, int> MIPS_Core::locateAddress(string location)
 			if (registersAddrDRAM[registerMap[reg]] != make_pair(-1, -1))
 				return {false, -registerMap[reg] - 1};
 			int address = registers[registerMap[reg]] + offset;
-			if (address % 4 || address >= DRAM::MAX / MAX_CORES)
+			if (address % 4 || address >= DRAM::MAX / MAX_CORES || address < 0)
 				return {false, 3};
 			return {true, address + id * DRAM::MAX / MAX_CORES};
 		}
@@ -237,7 +237,7 @@ pair<bool, int> MIPS_Core::locateAddress(string location)
 	try
 	{
 		int address = stoi(location);
-		if (address % 4 || address >= DRAM::MAX / MAX_CORES)
+		if (address % 4 || address >= DRAM::MAX / MAX_CORES || address < 0)
 			return {false, 3};
 		return {true, address + id * DRAM::MAX / MAX_CORES};
 	}
